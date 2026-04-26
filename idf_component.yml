@@ -1,0 +1,21 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+description: ESP-IDF polymorphic memory resources backed by heap capabilities
+documentation: https://github.com/euripedesrocha/esp-memory/tree/main/docs
+examples:
+  - path: examples/memory_resource
+files:
+  use_gitignore: true
+issues: https://github.com/euripedesrocha/esp-memory/issues
+license: Apache-2.0
+repository: https://github.com/euripedesrocha/esp-memory.git
+tags:
+  - esp-idf
+  - allocator
+  - pmr
+  - memory
+  - stl
+  - dsp
+url: https://github.com/euripedesrocha/esp-memory
+version: 0.1.0

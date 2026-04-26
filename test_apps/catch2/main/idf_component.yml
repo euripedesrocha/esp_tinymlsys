@@ -1,0 +1,6 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+  espressif/catch2: "^3.7.0"
+  euripedesrocha/esp_memory:
+    override_path: ../../..
