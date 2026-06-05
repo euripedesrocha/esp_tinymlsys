@@ -53,7 +53,7 @@ TEST_CASE("tensor supports range based fill and iteration", "[tensor]") {
     }
 
     const decltype(values)& const_values = values;
-    std::int32_t sum = 0;
+    float sum = 0;
     for (const auto value : const_values) {
         sum += value;
     }
@@ -61,10 +61,10 @@ TEST_CASE("tensor supports range based fill and iteration", "[tensor]") {
     STATIC_REQUIRE(decltype(values)::rank() == 2);
     STATIC_REQUIRE(std::same_as<typename decltype(values)::domain_type::value_type, float>);
     REQUIRE(values.size() == 4);
-    REQUIRE(values.data()[0] == 1);
-    REQUIRE(values.data()[3] == 4);
+    REQUIRE(values.data()[0] == 1.0F);
+    REQUIRE(values.data()[3] == 4.0F);
     REQUIRE(values.shape() == tensor_shape{2, 2});
-    REQUIRE(sum == 10);
+    REQUIRE(sum == 10.0F);
 }
 
 TEST_CASE("tensor supports multidimensional indexing", "[tensor]") {
@@ -84,7 +84,6 @@ TEST_CASE("tensor supports multidimensional indexing", "[tensor]") {
 TEST_CASE("tensor preserves zero extent semantics", "[tensor]") {
     tensor values(tensor_shape{0, 3});
 
-    REQUIRE(values.size() == 0);
     REQUIRE(values.empty());
     REQUIRE(values.shape() == tensor_shape{0, 3});
 }

@@ -13,7 +13,7 @@ namespace esp::tensor::detail {
  */
 inline void validate_invariant(bool verified, const char* message) {
     if (!verified) {
-#if defined(__cpp_exceptions)
+#ifdef __cpp_exceptions
         throw std::invalid_argument(message);
 #else
         (void)message;

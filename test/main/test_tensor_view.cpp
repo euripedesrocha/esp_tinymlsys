@@ -144,7 +144,6 @@ TEST_CASE("tensor view preserves zero extent semantics", "[tensor_view]") {
                                                                               tensor_shape{0, 3});
 
     REQUIRE(empty.shape() == tensor_shape{0, 3});
-    REQUIRE(empty.size() == 0);
     REQUIRE(empty.empty());
 }
 

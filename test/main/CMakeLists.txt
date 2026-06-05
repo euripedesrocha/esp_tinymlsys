@@ -4,3 +4,21 @@ idf_component_register(SRCS "test_main.cpp"
                             INCLUDE_DIRS "."
                             WHOLE_ARCHIVE
                             PRIV_REQUIRES console esp_tensor)
+
+if(IDF_TOOLCHAIN STREQUAL "clang" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(
+        ${COMPONENT_LIB}
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wconversion
+            -Wsign-conversion
+            -Wshift-overflow
+            -Wshadow
+            -Wformat=2
+            -Wnull-dereference
+            -Wdouble-promotion
+            -Wimplicit-fallthrough
+            -Werror
+    )
+endif()
