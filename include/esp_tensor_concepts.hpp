@@ -13,6 +13,19 @@ concept has_value_type = requires { typename std::remove_cvref_t<Domain>::value_
 template <class Shape>
 concept defines_rank = requires { std::remove_cvref_t<Shape>::rank_value; };
 
+namespace detail {
+
+template <class T, template <class...> class Template>
+struct is_specialization_of : std::false_type {};
+
+template <template <class...> class Template, class... Args>
+struct is_specialization_of<Template<Args...>, Template> : std::true_type {};
+
+} // namespace detail
+
+template <class T, template <class...> class Template>
+concept specialization_of = detail::is_specialization_of<std::remove_cvref_t<T>, Template>::value;
+
 template <class T>
 concept tensor_signature =
     requires {
@@ -45,5 +58,15 @@ concept contiguous_tensor_source = std::ranges::contiguous_range<Range> &&
                                            std::ranges::data(range)
                                        } -> std::convertible_to<ValueType*>;
                                    };
+
+template <class First, class... Rest>
+concept same_tensor_domain = (std::same_as<typename std::remove_cvref_t<First>::domain_type,
+                                           typename std::remove_cvref_t<Rest>::domain_type> &&
+                              ...);
+
+template <class First, class... Rest>
+concept same_tensor_shape = (std::same_as<typename std::remove_cvref_t<First>::shape_type,
+                                          typename std::remove_cvref_t<Rest>::shape_type> &&
+                             ...);
 
 } // namespace esp::tensor

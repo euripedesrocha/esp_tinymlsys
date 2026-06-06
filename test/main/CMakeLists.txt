@@ -1,6 +1,7 @@
 idf_component_register(SRCS "test_main.cpp"
                             "test_tensor_view.cpp"
                             "test_tensor.cpp"
+                            "test_tensor_ops.cpp"
                             INCLUDE_DIRS "."
                             WHOLE_ARCHIVE
                             PRIV_REQUIRES console esp_tensor)
