@@ -1,0 +1,7 @@
+dependencies:
+  esp_tensor:
+    version: '*'
+    override_path: ../..
+  esp_memory:
+    version: '*'
+    override_path: ../../../esp_memory
