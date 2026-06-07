@@ -1,0 +1,6 @@
+dependencies:
+  esp_tensor:
+    version: '*'
+    override_path: ../..
+  espressif/catch2:
+    version: '*'

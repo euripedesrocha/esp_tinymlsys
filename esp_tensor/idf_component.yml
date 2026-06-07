@@ -1,0 +1,4 @@
+dependencies:
+  idf: ">=6.0"
+  espressif/esp-nn: "^1.2.1"
+  espressif/esp-dsp: "^1.8.1"

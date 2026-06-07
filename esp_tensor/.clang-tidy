@@ -1,0 +1,17 @@
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  clang-analyzer-unix.*,
+  bugprone-*,
+  -bugprone-macro-parentheses,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-avoid-const-params-in-decls,
+  performance-*
+HeaderFilterRegex: '^.*/esp_tensor/include/.*'
+WarningsAsErrors: >
+  clang-analyzer-*
+CheckOptions:
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: true
