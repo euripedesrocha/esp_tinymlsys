@@ -1,0 +1,5 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+  euripedesrocha/esp_memory:
+    override_path: ../../..

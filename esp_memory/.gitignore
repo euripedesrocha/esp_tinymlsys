@@ -1,0 +1,35 @@
+# ESP-IDF / CMake build output
+build/
+build.*/
+build_*/
+cmake-build-*/
+**/.cache
+**/build/
+**/build.*/
+**/build_*/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/build.ninja
+**/compile_commands.json
+**/warnings.txt
+**/__pycache__
+
+# ESP-IDF generated project state
+sdkconfig
+sdkconfig.old
+**/sdkconfig
+**/sdkconfig.old
+managed_components/
+**/managed_components/
+dependencies.lock
+**/dependencies.lock
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+.pytest_cache/
+junit.xml
+test_logs/
