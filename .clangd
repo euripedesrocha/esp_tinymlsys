@@ -1,3 +1,3 @@
 CompileFlags:
-  CompilationDatabase: esp_memory/test_apps/verify/build_clang
+  CompilationDatabase: build/esp_memory_verify_clang
   Remove: [-m*, -f*]

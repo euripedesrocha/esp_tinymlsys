@@ -8,21 +8,21 @@ import sys
 
 def action_extensions(base_actions, project_path):
     default_target = "esp32s3"
-    root_dir = os.path.realpath(os.path.join(project_path, "..", ".."))
-    include_dir = os.path.join(root_dir, "include")
-    clang_tidy_config = os.path.join(root_dir, ".clang-tidy")
-    idf_py = os.path.join(os.environ["IDF_PATH"], "tools", "idf.py")
     project_dir = os.path.realpath(project_path)
-    clang_build_dir = os.path.join(project_dir, "build_clang")
-    analyzer_build_dir = os.path.join(project_dir, "build_gcc_analyzer")
+    component_dir = os.path.realpath(os.path.join(project_dir, "..", ".."))
+    repo_dir = os.path.realpath(os.path.join(component_dir, ".."))
+    clang_tidy_config = os.path.join(repo_dir, ".clang-tidy")
+    idf_py = os.path.join(os.environ["IDF_PATH"], "tools", "idf.py")
+    clang_build_dir = os.path.join(repo_dir, "build", "esp_memory_verify_clang")
+    analyzer_build_dir = os.path.join(repo_dir, "build", "esp_memory_verify_gcc_analyzer")
     clang_sdkconfig = os.path.join(project_dir, "sdkconfig.clang")
     analyzer_sdkconfig = os.path.join(project_dir, "sdkconfig.gcc_analyzer")
     excluded_dirs = {
         os.path.join(project_dir, "build"),
         clang_build_dir,
         analyzer_build_dir,
-        os.path.join(root_dir, "test_apps", "catch2"),
-        os.path.join(root_dir, "examples"),
+        os.path.join(component_dir, "test_apps", "catch2"),
+        os.path.join(component_dir, "examples"),
     }
 
     def run_step(title, command, env=None):
@@ -88,21 +88,21 @@ def action_extensions(base_actions, project_path):
 
         try:
             tracked = subprocess.check_output(
-                ["git", "-C", root_dir, "ls-files", *patterns],
+                ["git", "-C", repo_dir, "ls-files", *patterns],
                 text=True,
             )
             untracked = subprocess.check_output(
-                ["git", "-C", root_dir, "ls-files", "--others", "--exclude-standard", *patterns],
+                ["git", "-C", repo_dir, "ls-files", "--others", "--exclude-standard", *patterns],
                 text=True,
             )
             candidates = [
-                os.path.join(root_dir, path)
+                os.path.join(repo_dir, path)
                 for path in (tracked.splitlines() + untracked.splitlines())
-                if path
+                if path.startswith("esp_memory/")
             ]
         except (subprocess.CalledProcessError, FileNotFoundError):
             candidates = []
-            for current_root, dirs, files in os.walk(root_dir):
+            for current_root, dirs, files in os.walk(component_dir):
                 current_root = os.path.realpath(current_root)
                 dirs[:] = [
                     directory
@@ -155,7 +155,7 @@ def action_extensions(base_actions, project_path):
                 "--run-clang-tidy-options",
                 f"-config-file={clang_tidy_config}",
                 "--include-paths",
-                root_dir,
+                component_dir,
                 check_regex,
             ],
             env=clang_env,

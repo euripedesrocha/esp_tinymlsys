@@ -9,10 +9,11 @@ from pathlib import Path
 
 def action_extensions(base_actions, project_path):
     default_target = "esp32s3"
-    root_dir = Path(project_path).resolve().parent
     project_dir = Path(project_path).resolve()
-    clang_tidy_config = root_dir / ".clang-tidy"
-    clang_build_dir = project_dir / "build_clang"
+    component_dir = project_dir.parent
+    repo_dir = component_dir.parent
+    clang_tidy_config = repo_dir / ".clang-tidy"
+    clang_build_dir = repo_dir / "build" / "esp_tensor_test_clang"
 
     def run_step(title, command, env=None, check=True):
         print(f"Running {title}...")
@@ -55,7 +56,7 @@ def action_extensions(base_actions, project_path):
         )
 
     def verify_files():
-        source_dirs = [root_dir, project_dir / "main"]
+        source_dirs = [component_dir, project_dir / "main"]
         files = []
         for source_dir in source_dirs:
             files.extend(sorted(source_dir.glob("*.cpp")))
@@ -129,7 +130,7 @@ def action_extensions(base_actions, project_path):
         clang_env["CFLAGS"] = f"{clang_env.get('CFLAGS', '')} {clang_warning_workaround}".strip()
         clang_env["CXXFLAGS"] = f"{clang_env.get('CXXFLAGS', '')} {clang_warning_workaround}".strip()
 
-        configure_with_idf("build_clang", "sdkconfig.defaults", env=clang_env)
+        configure_with_idf(str(clang_build_dir), "sdkconfig.defaults", env=clang_env)
         run_clang_tidy(esp_clang_bin, clang_env)
 
     return {
