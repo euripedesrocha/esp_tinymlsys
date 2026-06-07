@@ -14,7 +14,6 @@ cmake-build-*/
 **/build.ninja
 **/compile_commands.json
 **/warnings.txt
-**/__pycache__
 
 # ESP-IDF generated project state
 sdkconfig
@@ -26,10 +25,22 @@ managed_components/
 dependencies.lock
 **/dependencies.lock
 
-# Editor / OS noise
-.DS_Store
+# Python / pytest artifacts
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.coverage
+junit.xml
+**/junit.xml
+test_logs/
+**/test_logs/
+
+# Editor / local tooling noise
+nvim.log
 .idea/
 .vscode/
-.pytest_cache/
-junit.xml
-test_logs/
+
+# OS-generated files
+.DS_Store

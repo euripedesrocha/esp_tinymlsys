@@ -9,9 +9,11 @@ Checks: >
   -readability-magic-numbers,
   -readability-avoid-const-params-in-decls,
   performance-*
-HeaderFilterRegex: '^.*/esp_tensor/include/.*'
+HeaderFilterRegex: '^.*/(esp_tensor|esp_memory)/include/.*'
 WarningsAsErrors: >
-  clang-analyzer-*
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*
 CheckOptions:
   - key: readability-function-cognitive-complexity.IgnoreMacros
     value: true

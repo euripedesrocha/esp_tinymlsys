@@ -1,3 +1,0 @@
-CompileFlags:
-  CompilationDatabase: test_apps/verify/build_clang
-  Remove: [-m*, -f*]
