@@ -1,8 +1,10 @@
 #pragma once
 
-#include <memory_resource>
 #include <concepts>
+#include <memory>
+#include <memory_resource>
 #include <type_traits>
+#include <utility>
 
 #include "esp_tensor_concepts.hpp"
 #include "esp_tensor_domain.hpp"
@@ -44,6 +46,40 @@ public:
         : storage_data(resource), shape_v(shape), domain_v(domain) {
         storage_data.resize(detail::logical_element_count(shape_v));
     }
+
+    /**
+     * @brief Copies tensor storage using the source tensor's memory resource.
+     *
+     * `std::pmr::vector` copy construction selects the current default resource
+     * by default. Tensor copies preserve the source resource instead, so
+     * alignment and heap-capability choices remain stable across copies.
+     */
+    tensor(const tensor& other)
+        : storage_data(other.storage_data, other.storage_data.get_allocator()),
+          shape_v(other.shape_v), domain_v(other.domain_v) {}
+
+    /**
+     * @brief Move construction transfers tensor storage and metadata.
+     */
+    tensor(tensor&&) noexcept = default;
+
+    /**
+     * @brief Copy assignment preserves the source tensor's memory resource.
+     */
+    tensor& operator=(const tensor& other) {
+        if (this != &other) {
+            auto copy = tensor(other);
+            std::destroy_at(this);
+            std::construct_at(this, std::move(copy));
+        }
+
+        return *this;
+    }
+
+    /**
+     * @brief Move assignment transfers tensor storage and metadata.
+     */
+    tensor& operator=(tensor&&) noexcept = default;
 
     /**
      * @brief Returns the tensor rank.
