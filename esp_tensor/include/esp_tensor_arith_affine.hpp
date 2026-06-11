@@ -157,7 +157,7 @@ requantize_shared_shift_add_input(std::int32_t value, quantized_multiplier multi
 
 template <class View>
 concept affine_tensor_view =
-    tensor_type<View> && affine_domain<typename std::remove_cvref_t<View>::domain_type>;
+    tensor_view_like<View> && affine_domain<typename std::remove_cvref_t<View>::domain_type>;
 
 /**
  * @brief Adds two affine-quantized spans in the prepared output domain.
@@ -166,7 +166,7 @@ concept affine_tensor_view =
  * in the output affine domain.
  *
  */
-inline void add(affine_tensor_view auto lhs, affine_tensor_view auto rhs,
+inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
                 affine_tensor_view auto out) {
     const auto& lhs_domain = lhs.domain();
     const auto& rhs_domain = rhs.domain();
@@ -238,7 +238,7 @@ struct add_plan {
            plan.lhs_multiplier.shift - shift <= 0 && plan.rhs_multiplier.shift - shift <= 0;
 }
 
-inline void add(affine_tensor_view auto lhs, affine_tensor_view auto rhs,
+inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
                 affine_tensor_view auto out) {
     const auto plan = plan_add(lhs.domain(), rhs.domain(), out.domain());
     validate_invariant(add_plan_is_supported(plan),
@@ -269,7 +269,8 @@ namespace esp::tensor {
  * @throws std::invalid_argument When quantization scales are not finite or
  * positive, or when an accelerated affine plan is not supported by the backend.
  */
-inline void add_impl(detail::affine_tensor_view auto lhs, detail::affine_tensor_view auto rhs,
+inline void add_impl(const detail::affine_tensor_view auto lhs,
+                     const detail::affine_tensor_view auto rhs,
                      detail::affine_tensor_view auto out) {
     if constexpr (hal::active_target() == hal::target::esp32s3 ||
                   hal::active_target() == hal::target::esp32p4) {

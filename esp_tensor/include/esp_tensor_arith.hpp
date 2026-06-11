@@ -14,7 +14,7 @@ concept no_quantization_domain = specialization_of<Domain, domain::no_quantizati
 
 template <class View>
 concept no_quantized_tensor_view =
-    tensor_type<View> && std::ranges::input_range<View> &&
+    tensor_view_like<View> && std::ranges::input_range<View> &&
     no_quantization_domain<typename std::remove_cvref_t<View>::domain_type>;
 } // namespace esp::tensor::detail
 
@@ -26,8 +26,8 @@ namespace esp::tensor {
  * This evaluates the reference elementwise loop using the value type's normal
  * `+` semantics.
  */
-inline void add_impl(detail::no_quantized_tensor_view auto lhs,
-                     detail::no_quantized_tensor_view auto rhs,
+inline void add_impl(const detail::no_quantized_tensor_view auto lhs,
+                     const detail::no_quantized_tensor_view auto rhs,
                      detail::no_quantized_tensor_view auto out) {
     using value_type = typename std::remove_cvref_t<decltype(lhs)>::domain_type::value_type;
     std::ranges::transform(lhs, rhs, out.begin(),

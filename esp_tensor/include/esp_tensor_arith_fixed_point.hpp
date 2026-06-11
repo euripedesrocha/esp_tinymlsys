@@ -21,7 +21,7 @@ concept fixed_point_domain = specialization_of<Domain, domain::fixed_point>;
 
 template <class View>
 concept fixed_point_tensor_view =
-    tensor_type<View> && std::ranges::input_range<View> &&
+    tensor_view_like<View> && std::ranges::input_range<View> &&
     fixed_point_domain<typename std::remove_cvref_t<View>::domain_type>;
 
 namespace esp32s3 {
@@ -29,7 +29,7 @@ namespace esp32s3 {
 template <class T>
 concept accelerated_fixed_point = std::same_as<T, std::int8_t> || std::same_as<T, std::int16_t>;
 
-inline void add(fixed_point_tensor_view auto lhs, fixed_point_tensor_view auto rhs,
+inline void add(const fixed_point_tensor_view auto lhs, const fixed_point_tensor_view auto rhs,
                 fixed_point_tensor_view auto out) {
     using value_type = typename std::remove_cvref_t<decltype(out)>::domain_type::value_type;
 
@@ -82,8 +82,8 @@ namespace esp::tensor {
  * preconditions.
  *
  */
-inline void add_impl(detail::fixed_point_tensor_view auto lhs,
-                     detail::fixed_point_tensor_view auto rhs,
+inline void add_impl(const detail::fixed_point_tensor_view auto lhs,
+                     const detail::fixed_point_tensor_view auto rhs,
                      detail::fixed_point_tensor_view auto out) {
     using value_type = typename std::remove_cvref_t<decltype(out)>::domain_type::value_type;
 

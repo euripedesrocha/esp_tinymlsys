@@ -6,11 +6,12 @@
 
 namespace esp::tensor {
 
-inline void add_impl(auto, auto, auto) {
+inline void add_impl(auto /*unused*/, auto /*unused*/, auto /*unused*/) {
     static_assert(false, "tensor add is not implemented for these tensor operand types");
 }
 
-inline void add(tensor_type auto lhs, tensor_type auto rhs, tensor_type auto out)
+inline void add(const tensor_view_like auto lhs, const tensor_view_like auto rhs,
+                tensor_view_like auto out)
     requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)> &&
              same_tensor_shape<decltype(lhs), decltype(rhs), decltype(out)>
 {
@@ -18,6 +19,7 @@ inline void add(tensor_type auto lhs, tensor_type auto rhs, tensor_type auto out
                                "tensor add requires matching input shapes");
     detail::validate_invariant(lhs.shape() == out.shape(),
                                "tensor add requires output shape to match inputs");
+
     add_impl(lhs, rhs, out);
 }
 

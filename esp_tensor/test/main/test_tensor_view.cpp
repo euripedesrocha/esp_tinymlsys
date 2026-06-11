@@ -56,7 +56,8 @@ struct calibrated_tensor_like {
 TEST_CASE("tensor view carries runtime shape and domain", "[tensor_view]") {
     std::int16_t values[] = {1, 2, 3, 4, 5, 6};
     calibration_domain calibration{.profile = 7};
-    tensor_view<calibration_domain, tensor_shape<2>> view(values, tensor_shape{2, 3}, calibration);
+    tensor_view<std::int16_t, calibration_domain, tensor_shape<2>> view(values, tensor_shape{2, 3},
+                                                                        calibration);
 
     STATIC_REQUIRE(decltype(view)::rank() == 2);
     REQUIRE(view.data() == values);
@@ -138,10 +139,26 @@ TEST_CASE("tensor view deduces no-quantization domain from explicit shapes", "[t
     REQUIRE(matrix_view[1, 0] == 3);
 }
 
+TEST_CASE("tensor view preserves const storage from contiguous sources", "[tensor_view]") {
+    constexpr auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
+
+    tensor_view view(values, tensor_shape{2, 2});
+
+    STATIC_REQUIRE(
+        std::same_as<decltype(view)::domain_type, domain::no_quantization<std::int16_t>>);
+    STATIC_REQUIRE(std::same_as<decltype(view)::element_type, const std::int16_t>);
+    STATIC_REQUIRE(std::same_as<decltype(view.data()), const std::int16_t*>);
+    STATIC_REQUIRE(std::same_as<decltype(view.begin()), const std::int16_t*>);
+    STATIC_REQUIRE(std::same_as<decltype(view[0, 0]), const std::int16_t&>);
+    REQUIRE(view.data() == values.data());
+    REQUIRE(view.shape() == tensor_shape{2, 2});
+    REQUIRE(view[1, 0] == 3);
+}
+
 TEST_CASE("tensor view preserves zero extent semantics", "[tensor_view]") {
     std::array<std::int16_t, 1> values = {42};
-    tensor_view<domain::no_quantization<std::int16_t>, tensor_shape<2>> empty(values,
-                                                                              tensor_shape{0, 3});
+    tensor_view<std::int16_t, domain::no_quantization<std::int16_t>, tensor_shape<2>> empty(
+        values, tensor_shape{0, 3});
 
     REQUIRE(empty.shape() == tensor_shape{0, 3});
     REQUIRE(empty.empty());
