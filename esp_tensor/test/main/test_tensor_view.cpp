@@ -51,6 +51,12 @@ struct calibrated_tensor_like {
     std::size_t size() const { return logical_size; }
 };
 
+constexpr auto constexpr_view_values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
+constexpr auto constexpr_view_shape = tensor_shape{2, 2};
+constexpr auto constexpr_view_domain = domain::no_quantization<float>{};
+constexpr auto constexpr_view =
+    tensor_view(constexpr_view_values, constexpr_view_shape, constexpr_view_domain);
+
 } // namespace
 
 TEST_CASE("tensor view carries runtime shape and domain", "[tensor_view]") {
@@ -153,6 +159,20 @@ TEST_CASE("tensor view preserves const storage from contiguous sources", "[tenso
     REQUIRE(view.data() == values.data());
     REQUIRE(view.shape() == tensor_shape{2, 2});
     REQUIRE(view[1, 0] == 3);
+}
+
+TEST_CASE("tensor view can be constructed as a constant expression", "[tensor_view]") {
+    STATIC_REQUIRE(
+        std::same_as<decltype(constexpr_view)::domain_type, domain::no_quantization<float>>);
+    STATIC_REQUIRE(std::same_as<decltype(constexpr_view)::shape_type, tensor_shape<2>>);
+    STATIC_REQUIRE(std::same_as<decltype(constexpr_view)::element_type, const float>);
+    STATIC_REQUIRE(constexpr_view.rank() == 2);
+    STATIC_REQUIRE(constexpr_view.size() == 4);
+    STATIC_REQUIRE(constexpr_view.shape() == constexpr_view_shape);
+    STATIC_REQUIRE(constexpr_view.data()[0] == 1.0F);
+    STATIC_REQUIRE(constexpr_view.data()[3] == 4.0F);
+    STATIC_REQUIRE(
+        std::same_as<decltype(constexpr_view.domain()), const domain::no_quantization<float>&>);
 }
 
 TEST_CASE("tensor view preserves zero extent semantics", "[tensor_view]") {

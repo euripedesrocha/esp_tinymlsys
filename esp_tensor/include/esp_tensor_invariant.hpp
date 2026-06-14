@@ -1,5 +1,6 @@
 #pragma once
 
+#include <exception>
 #include <stdexcept>
 
 namespace esp::tensor::detail {
@@ -11,7 +12,7 @@ namespace esp::tensor::detail {
  * terminates otherwise.
  *
  */
-inline void validate_invariant(bool verified, const char* message) {
+constexpr void validate_invariant(bool verified, const char* message) {
     if (!verified) {
 #ifdef __cpp_exceptions
         throw std::invalid_argument(message);
