@@ -7,8 +7,7 @@
 #include <limits>
 #include <type_traits>
 
-#include "esp_tensor_concepts.hpp"
-#include "esp_tensor_domain.hpp"
+#include "esp_tensor_domain_concepts.hpp"
 #include "esp_tensor_hal.hpp"
 #include "esp_tensor_invariant.hpp"
 #include "esp_tensor_numeric.hpp"
@@ -28,9 +27,6 @@ namespace esp::tensor::detail {
                                                            std::int32_t zero_point) {
     return static_cast<std::int32_t>(value) - zero_point;
 }
-
-template <class Domain>
-concept affine_domain = specialization_of<Domain, domain::affine>;
 
 inline void validate_affine_scales(const affine_domain auto& input_domain,
                                    const affine_domain auto& output_domain) {
@@ -154,10 +150,6 @@ requantize_shared_shift_add_input(std::int32_t value, quantized_multiplier multi
     return scale_by_power_of_two(sat_round_doubling_high_mul(shifted, multiplier.multiplier),
                                  left_shift - multiplier.shift);
 }
-
-template <class View>
-concept affine_tensor_view =
-    tensor_view_like<View> && affine_domain<typename std::remove_cvref_t<View>::domain_type>;
 
 /**
  * @brief Adds two affine-quantized spans in the prepared output domain.

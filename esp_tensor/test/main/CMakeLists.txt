@@ -4,6 +4,7 @@ idf_component_register(SRCS "test_main.cpp"
                             "test_tensor_arith_affine.cpp"
                             "test_tensor_arith_fixed_point.cpp"
                             "test_tensor_ops.cpp"
+                            "test_tensor_requantize.cpp"
                             INCLUDE_DIRS "."
                             WHOLE_ARCHIVE
                             PRIV_REQUIRES console esp_tensor)

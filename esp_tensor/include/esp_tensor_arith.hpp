@@ -4,19 +4,7 @@
 #include <ranges>
 #include <type_traits>
 
-#include "esp_tensor_concepts.hpp"
-#include "esp_tensor_domain.hpp"
-
-namespace esp::tensor::detail {
-
-template <class Domain>
-concept no_quantization_domain = specialization_of<Domain, domain::no_quantization>;
-
-template <class View>
-concept no_quantized_tensor_view =
-    tensor_view_like<View> && std::ranges::input_range<View> &&
-    no_quantization_domain<typename std::remove_cvref_t<View>::domain_type>;
-} // namespace esp::tensor::detail
+#include "esp_tensor_domain_concepts.hpp"
 
 namespace esp::tensor {
 

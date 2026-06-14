@@ -8,21 +8,12 @@
 #include <type_traits>
 
 #include "dsps_add.h"
-#include "esp_tensor_concepts.hpp"
-#include "esp_tensor_domain.hpp"
+#include "esp_tensor_domain_concepts.hpp"
 #include "esp_tensor_hal.hpp"
 #include "esp_tensor_invariant.hpp"
 #include "esp_tensor_numeric.hpp"
 
 namespace esp::tensor::detail {
-
-template <class Domain>
-concept fixed_point_domain = specialization_of<Domain, domain::fixed_point>;
-
-template <class View>
-concept fixed_point_tensor_view =
-    tensor_view_like<View> && std::ranges::input_range<View> &&
-    fixed_point_domain<typename std::remove_cvref_t<View>::domain_type>;
 
 namespace esp32s3 {
 
