@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "esp_tensor.cpp"
+    SRCS "esp_tensor.cpp" "esp_tensor_dot_s16_esp32s3.S"
     INCLUDE_DIRS "include"
     REQUIRES esp-nn esp-dsp
 )

@@ -33,6 +33,11 @@ class TensorType:
     strategy_dtype: str
     encode: Callable[[list], bytes]
     decode: Callable[[bytes], list]
+    output_dtype: int | None = None
+
+    @property
+    def effective_output_dtype(self) -> int:
+        return self.dtype if self.output_dtype is None else self.output_dtype
 
 
 @dataclass(frozen=True)
@@ -179,6 +184,110 @@ NO_QUANT_F32 = TensorType(
     encode=_encode_f32_le,
     decode=_decode_f32_le,
 )
+
+DOT_FIXED_S8_Q7_TO_S8 = TensorType(
+    method="linear_algebra.dot",
+    dtype=Dtype.INT8,
+    domain_type=DomainType.FIXED_POINT,
+    strategy_dtype="s8",
+    encode=_encode_s8,
+    decode=_decode_s8,
+    output_dtype=Dtype.INT8,
+)
+
+DOT_FIXED_S16_Q15_TO_S16 = TensorType(
+    method="linear_algebra.dot",
+    dtype=Dtype.INT16,
+    domain_type=DomainType.FIXED_POINT,
+    strategy_dtype="s16",
+    encode=_encode_s16_le,
+    decode=_decode_s16_le,
+    output_dtype=Dtype.INT16,
+)
+
+DOT_NO_QUANT_F32 = TensorType(
+    method="linear_algebra.dot",
+    dtype=Dtype.FLOAT32,
+    domain_type=DomainType.NO_QUANTIZATION,
+    strategy_dtype="f32",
+    encode=_encode_f32_le,
+    decode=_decode_f32_le,
+)
+
+
+def _encode_dot_tensor_header(
+    input_dtype: int,
+    domain_type: int,
+    output_dtype: int,
+    operand_shapes: list[tuple[int, tuple[int, ...]]],
+) -> bytes:
+    header = struct.pack("<BBBB", input_dtype, domain_type, output_dtype, len(operand_shapes))
+    for rank, shape in operand_shapes:
+        header += struct.pack("<B", rank)
+        header += _encode_shape(shape)
+    return header
+
+
+def _validate_dot_operands(
+    lhs_desc: TensorDescriptor,
+    rhs_desc: TensorDescriptor,
+    out_desc: TensorDescriptor,
+    lhs: list,
+    rhs: list,
+    lhs_payload: bytes,
+    rhs_payload: bytes,
+) -> None:
+    if lhs_desc.tensor_type != rhs_desc.tensor_type:
+        raise ValueError("dot operands must use the same input tensor type")
+    if lhs_desc.shape != rhs_desc.shape:
+        raise ValueError("dot operands must use the same shape")
+    if out_desc.shape != (1,):
+        raise ValueError("dot output must be a scalar shape (1,)")
+
+    expected_elements = _element_count(lhs_desc.shape)
+    if len(lhs) != expected_elements or len(rhs) != expected_elements:
+        raise ValueError(
+            f"dot payload length mismatch: expected {expected_elements}, "
+            f"got lhs={len(lhs)}, rhs={len(rhs)}"
+        )
+    input_bytes = expected_elements * _dtype_size(lhs_desc.tensor_type.dtype)
+    if len(lhs_payload) != input_bytes or len(rhs_payload) != input_bytes:
+        raise ValueError(
+            f"encoded dot payload size mismatch: expected {input_bytes}, "
+            f"got lhs={len(lhs_payload)}, rhs={len(rhs_payload)}"
+        )
+    if len(out_desc.shape) != 1 or out_desc.shape[0] != 1:
+        raise ValueError("dot output shape must be (1,)")
+
+
+def dot(
+    client: RpcClient,
+    lhs_desc: TensorDescriptor,
+    rhs_desc: TensorDescriptor,
+    out_desc: TensorDescriptor,
+    lhs: list,
+    rhs: list,
+) -> list:
+    lhs_payload = lhs_desc.tensor_type.encode(lhs)
+    rhs_payload = rhs_desc.tensor_type.encode(rhs)
+    _validate_dot_operands(
+        lhs_desc, rhs_desc, out_desc, lhs, rhs, lhs_payload, rhs_payload
+    )
+
+    header = _encode_dot_tensor_header(
+        lhs_desc.tensor_type.dtype,
+        lhs_desc.tensor_type.domain_type,
+        out_desc.tensor_type.effective_output_dtype,
+        operand_shapes=[
+            (len(lhs_desc.shape), lhs_desc.shape),
+            (len(rhs_desc.shape), rhs_desc.shape),
+        ],
+    )
+    response = client.call(
+        lhs_desc.tensor_type.method,
+        header + lhs_payload + rhs_payload,
+    )
+    return out_desc.tensor_type.decode(response)
 
 
 def add(

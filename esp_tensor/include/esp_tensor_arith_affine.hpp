@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <type_traits>
 
 #include "esp_tensor_domain_concepts.hpp"
@@ -94,8 +95,8 @@ struct quantized_multiplier {
             return 0;
         }
 
-        return saturate_cast<std::int32_t>(static_cast<std::int64_t>(value) *
-                                           (std::int64_t{1} << left_shift));
+        return std::saturating_cast<std::int32_t>(static_cast<std::int64_t>(value) *
+                                                  (std::int64_t{1} << left_shift));
     }
 
     if (exponent == 0) {
@@ -144,8 +145,8 @@ requantize_shared_shift_add_input(std::int32_t value, quantized_multiplier multi
                   : value < 0 ? std::numeric_limits<std::int32_t>::min()
                               : 0;
     } else {
-        shifted = saturate_cast<std::int32_t>(static_cast<std::int64_t>(value) *
-                                              (std::int64_t{1} << left_shift));
+        shifted = std::saturating_cast<std::int32_t>(static_cast<std::int64_t>(value) *
+                                                     (std::int64_t{1} << left_shift));
     }
     return scale_by_power_of_two(sat_round_doubling_high_mul(shifted, multiplier.multiplier),
                                  left_shift - multiplier.shift);
@@ -177,8 +178,8 @@ inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto
             const auto rhs_term = requantize_shared_shift_add_input(
                 centered_affine_value(rhs_value, static_cast<std::int32_t>(rhs_domain.zero_point)),
                 rhs_multiplier, left_shift);
-            return saturate_cast<std::int8_t>(lhs_term + rhs_term +
-                                              static_cast<std::int32_t>(out_domain.zero_point));
+            return std::saturating_cast<std::int8_t>(
+                lhs_term + rhs_term + static_cast<std::int32_t>(out_domain.zero_point));
         });
 }
 

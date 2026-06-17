@@ -107,6 +107,20 @@ struct tensor_request {
     std::vector<tensor_request_operand> operands;
 };
 
+struct dot_request {
+    wire_dtype input_dtype;
+    wire_domain_type domain_type;
+    wire_dtype output_dtype;
+    std::vector<tensor_request_operand> operands;
+};
+
+struct dot_wire_header {
+    wire_dtype input_dtype;
+    wire_domain_type domain_type;
+    wire_dtype output_dtype;
+    std::vector<operand_header> operands;
+};
+
 [[nodiscard]] inline command_result<affine_header>
 decode_affine_header(std::span<const std::uint8_t> data, std::size_t& offset) {
     constexpr std::size_t affine_header_size = sizeof(float) + sizeof(std::int32_t);
@@ -340,6 +354,128 @@ decode_tensor_request(std::span<const std::uint8_t> request) {
         decoded.operands.push_back(tensor_request_operand{
             .header = operand,
             .affine = desc.affine,
+            .payload = desc.payload,
+        });
+        offset += byte_size;
+    }
+
+    return decoded;
+}
+
+[[nodiscard]] inline std::size_t get_dot_header_size(const dot_wire_header& header) {
+    std::size_t prefix = 4; // input_dtype + domain_type + output_dtype + num_inputs
+    for (const auto& operand : header.operands) {
+        prefix += 1 + (operand.rank * sizeof(std::uint32_t)); // rank byte + shape
+    }
+    return prefix;
+}
+
+[[nodiscard]] inline command_result<dot_wire_header>
+decode_dot_tensor_header(std::span<const std::uint8_t> data) {
+    if (data.size() < 4) {
+        return std::unexpected(make_error(rpc::status::bad_frame, "dot header too small"));
+    }
+
+    auto input_dtype = parse_wire_dtype(data[0]);
+    if (!input_dtype) {
+        return std::unexpected(input_dtype.error());
+    }
+
+    auto domain_type = parse_wire_domain_type(data[1]);
+    if (!domain_type) {
+        return std::unexpected(domain_type.error());
+    }
+
+    auto output_dtype = parse_wire_dtype(data[2]);
+    if (!output_dtype) {
+        return std::unexpected(output_dtype.error());
+    }
+
+    const std::uint8_t num_inputs = data[3];
+
+    dot_wire_header header{
+        .input_dtype = input_dtype.value(),
+        .domain_type = domain_type.value(),
+        .output_dtype = output_dtype.value(),
+        .operands = {},
+    };
+    header.operands.reserve(num_inputs);
+
+    std::size_t offset = 4;
+    for (std::uint8_t i = 0; i < num_inputs; ++i) {
+        if (data.size() < offset + 1) {
+            return std::unexpected(make_error(rpc::status::bad_frame, "missing operand rank"));
+        }
+
+        const std::uint8_t rank = data[offset];
+        offset += 1;
+
+        const std::size_t shape_bytes = rank * sizeof(std::uint32_t);
+        if (data.size() < offset + shape_bytes) {
+            return std::unexpected(make_error(rpc::status::bad_frame, "missing operand shape"));
+        }
+
+        operand_header operand{.rank = rank, .shape = {}};
+        operand.shape.resize(rank);
+        for (std::size_t j = 0; j < rank; ++j) {
+            std::uint32_t dim = 0;
+            std::memcpy(&dim, data.data() + offset + (j * sizeof(std::uint32_t)),
+                        sizeof(std::uint32_t));
+            operand.shape[j] = dim;
+        }
+        offset += shape_bytes;
+        header.operands.push_back(std::move(operand));
+    }
+
+    return header;
+}
+
+[[nodiscard]] inline command_result<dot_request>
+decode_dot_tensor_request(std::span<const std::uint8_t> request) {
+    auto header_result = decode_dot_tensor_header(request);
+    if (!header_result) {
+        return std::unexpected(header_result.error());
+    }
+
+    const auto& header = header_result.value();
+    const std::size_t header_size = get_dot_header_size(header);
+    const auto payload = request.subspan(header_size);
+
+    std::size_t payload_size = 0;
+    for (const auto& operand : header.operands) {
+        payload_size += element_count(operand.shape) * dtype_byte_size(header.input_dtype);
+    }
+    if (payload.size() != payload_size) {
+        return std::unexpected(make_error(rpc::status::bad_frame, "invalid tensor data size"));
+    }
+
+    dot_request decoded{
+        .input_dtype = header.input_dtype,
+        .domain_type = header.domain_type,
+        .output_dtype = header.output_dtype,
+        .operands = {},
+    };
+    decoded.operands.reserve(header.operands.size());
+
+    std::size_t offset = 0;
+    for (std::size_t operand_index = 0; operand_index < header.operands.size(); ++operand_index) {
+        const auto& operand = header.operands[operand_index];
+        const std::size_t byte_size =
+            element_count(operand.shape) * dtype_byte_size(header.input_dtype);
+        auto desc = tensor_param_desc{
+            .dtype = header.input_dtype,
+            .domain_type = header.domain_type,
+            .affine = {},
+            .shape = operand.shape,
+            .payload = payload.subspan(offset, byte_size),
+        };
+        if (auto valid = validate_tensor_desc(desc); !valid) {
+            return std::unexpected(valid.error());
+        }
+
+        decoded.operands.push_back(tensor_request_operand{
+            .header = operand,
+            .affine = {},
             .payload = desc.payload,
         });
         offset += byte_size;

@@ -6,9 +6,7 @@
 #include <cstdint>
 #include <span>
 
-#include "esp_tensor_hal.hpp"
-#include "esp_tensor_arith_fixed_point.hpp"
-#include "esp_tensor_ops.hpp"
+#include "esp_tensor_ops_fixed_point.hpp"
 #include "esp_tensor_view.hpp"
 
 using namespace esp::tensor;
@@ -44,7 +42,7 @@ TEST_CASE("fixed point add saturates at the domain limits", "[fixed_point]") {
     alignas(16) std::array<std::int16_t, 4> rhs = {1, -1, 16384, -16384};
     alignas(16) std::array<std::int16_t, 4> out = {0, 0, 0, 0};
 
-    add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+    arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
 
     require_equal(out, std::array<std::int16_t, 4>{
                            std::numeric_limits<std::int16_t>::max(),
@@ -60,7 +58,8 @@ TEST_CASE("fixed point add handles vector-width tails correctly", "[fixed_point]
         alignas(16) std::array<std::int16_t, 10> rhs = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
         alignas(16) std::array<std::int16_t, 10> out = {};
 
-        add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
 
         require_equal(out, std::array<std::int16_t, 10>{11, 11, 11, 11, 11, 11, 11, 11, 11, 11});
     }
@@ -72,7 +71,8 @@ TEST_CASE("fixed point add handles vector-width tails correctly", "[fixed_point]
                                                        2, 2, 2, 2, 2, 2, 2, 2};
         alignas(16) std::array<std::int8_t, 17> out = {};
 
-        add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
 
         require_equal(
             out, std::array<std::int8_t, 17>{3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3});
@@ -85,7 +85,8 @@ TEST_CASE("fixed point add supports signed storage widths", "[fixed_point]") {
         alignas(16) std::array<std::int16_t, 2> rhs = {8192, -8192};
         alignas(16) std::array<std::int16_t, 2> out = {};
 
-        add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
 
         require_equal(out, std::array<std::int16_t, 2>{24576, -24576});
     }
@@ -95,19 +96,32 @@ TEST_CASE("fixed point add supports signed storage widths", "[fixed_point]") {
         alignas(16) std::array<std::int8_t, 2> rhs = {16, -16};
         alignas(16) std::array<std::int8_t, 2> out = {};
 
-        add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
 
         require_equal(out, std::array<std::int8_t, 2>{48, -48});
     }
 
-    SECTION("s32") {
+    SECTION("s32 ordinary values") {
+        alignas(16) std::array<std::int32_t, 4> lhs = {1000, -2000, 3000, -4000};
+        alignas(16) std::array<std::int32_t, 4> rhs = {500, -500, -1000, 1000};
+        alignas(16) std::array<std::int32_t, 4> out = {};
+
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
+
+        require_equal(out, std::array<std::int32_t, 4>{1500, -2500, 2000, -3000});
+    }
+
+    SECTION("s32 saturation") {
         alignas(16) std::array<std::int32_t, 5> lhs = {
             1, 2, 3, 4, std::numeric_limits<std::int32_t>::max(),
         };
         alignas(16) std::array<std::int32_t, 5> rhs = {5, 4, 3, 2, 1};
         alignas(16) std::array<std::int32_t, 5> out = {};
 
-        add(make_fixed_point_view(lhs), make_fixed_point_view(rhs), make_fixed_point_view(out));
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
 
         require_equal(out, std::array<std::int32_t, 5>{
                                6,
@@ -119,15 +133,45 @@ TEST_CASE("fixed point add supports signed storage widths", "[fixed_point]") {
     }
 }
 
+TEST_CASE("fixed point add handles empty tensors", "[fixed_point]") {
+    alignas(16) std::array<std::int16_t, 1> lhs = {42};
+    alignas(16) std::array<std::int16_t, 1> rhs = {1};
+    alignas(16) std::array<std::int16_t, 1> out = {99};
+
+    arith::add(tensor_view(std::span<std::int16_t>(lhs.data(), 0), tensor_shape{0},
+                           domain::fixed_point<std::int16_t>{}),
+               tensor_view(std::span<std::int16_t>(rhs.data(), 0), tensor_shape{0},
+                           domain::fixed_point<std::int16_t>{}),
+               tensor_view(std::span<std::int16_t>(out.data(), 0), tensor_shape{0},
+                           domain::fixed_point<std::int16_t>{}));
+
+    REQUIRE(out[0] == 99);
+}
+
+TEST_CASE("fixed point add uses aligned accelerated path on esp32s3", "[fixed_point]") {
+    if constexpr (hal::active_target() == hal::target::esp32s3) {
+        alignas(16) std::array<std::int16_t, 8> lhs = {1, 2, 3, 4, 5, 6, 7, 8};
+        alignas(16) std::array<std::int16_t, 8> rhs = {8, 7, 6, 5, 4, 3, 2, 1};
+        alignas(16) std::array<std::int16_t, 8> out = {};
+
+        arith::add(make_fixed_point_view(lhs), make_fixed_point_view(rhs),
+                   make_fixed_point_view(out));
+
+        require_equal(out, std::array<std::int16_t, 8>{9, 9, 9, 9, 9, 9, 9, 9});
+    } else {
+        SUCCEED("aligned accelerated path is only exercised on esp32s3");
+    }
+}
+
 TEST_CASE("fixed point add validates shape compatibility at the ops facade", "[fixed_point]") {
     alignas(16) std::array<std::int16_t, 2> lhs = {1, 2};
     alignas(16) std::array<std::int16_t, 3> rhs = {3, 4, 5};
     alignas(16) std::array<std::int16_t, 2> out = {0, 0};
 
     REQUIRE_THROWS_MATCHES(
-        add(tensor_view(lhs, tensor_shape{2}, domain::fixed_point<std::int16_t>{}),
-            tensor_view(rhs, tensor_shape{3}, domain::fixed_point<std::int16_t>{}),
-            tensor_view(out, tensor_shape{2}, domain::fixed_point<std::int16_t>{})),
+        arith::add(tensor_view(lhs, tensor_shape{2}, domain::fixed_point<std::int16_t>{}),
+                   tensor_view(rhs, tensor_shape{3}, domain::fixed_point<std::int16_t>{}),
+                   tensor_view(out, tensor_shape{2}, domain::fixed_point<std::int16_t>{})),
         std::invalid_argument,
         Catch::Matchers::Message("tensor add requires matching input shapes"));
 }
@@ -144,7 +188,8 @@ TEST_CASE("fixed point add requires aligned buffers on accelerated targets", "[f
         auto* out = reinterpret_cast<std::int16_t*>(out_storage.data() + 1);
 
         REQUIRE_THROWS_MATCHES(
-            add(tensor_view(std::span<std::int16_t>(lhs, element_count),
+            arith::add(
+                tensor_view(std::span<std::int16_t>(lhs, element_count),
                             tensor_shape{element_count}, domain::fixed_point<std::int16_t>{}),
                 tensor_view(std::span<std::int16_t>(rhs, element_count),
                             tensor_shape{element_count}, domain::fixed_point<std::int16_t>{}),

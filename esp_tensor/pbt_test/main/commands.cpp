@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <memory_resource>
 #include <span>
 #include <stdexcept>
@@ -20,10 +21,8 @@
 
 #include "esp_memory_resource.hpp"
 #include "esp_tensor.hpp"
-#include "esp_tensor_arith.hpp"
-#include "esp_tensor_arith_affine.hpp"
-#include "esp_tensor_arith_fixed_point.hpp"
-#include "esp_tensor_ops.hpp"
+#include "esp_tensor_ops_affine.hpp"
+#include "esp_tensor_ops_fixed_point.hpp"
 #include "esp_tensor_view.hpp"
 
 using namespace esp::tensor;
@@ -130,20 +129,119 @@ prepare_add_parameters(tensor_rpc::tensor_parameters params, std::pmr::memory_re
     // an accelerated path.
     esp::memory::accelerator_resource mem{caps};
 
-    auto result =
-        tensor_rpc::decode_tensor_request(request)
-            .and_then([&](const tensor_rpc::tensor_request& decoded) {
-                return tensor_rpc::build_tensor_parameters(decoded, &mem);
-            })
-            .and_then([&](tensor_rpc::tensor_parameters params) {
-                return prepare_add_parameters(std::move(params), &mem);
-            })
-            .and_then([](binary_elementwise_parameters params) {
-                return invoke_binary_elementwise(
-                    std::move(params), [](auto lhs, auto rhs, auto out) { add(lhs, rhs, out); });
-            });
+    auto result = tensor_rpc::decode_tensor_request(request)
+                      .and_then([&](const tensor_rpc::tensor_request& decoded) {
+                          return tensor_rpc::build_tensor_parameters(decoded, &mem);
+                      })
+                      .and_then([&](tensor_rpc::tensor_parameters params) {
+                          return prepare_add_parameters(std::move(params), &mem);
+                      })
+                      .and_then([](binary_elementwise_parameters params) {
+                          return invoke_binary_elementwise(
+                              std::move(params),
+                              [](auto lhs, auto rhs, auto out) { arith::add(lhs, rhs, out); });
+                      });
 
     return result.has_value() ? result.value() : result.error();
+}
+
+struct dot_parameters {
+    std::function<rpc::result()> invoke;
+};
+
+[[nodiscard]] command_result<dot_parameters>
+prepare_dot_parameters(tensor_rpc::dot_request request, std::pmr::memory_resource* mem) {
+    if (request.operands.size() != 2) {
+        return std::unexpected(
+            tensor_rpc::make_error(rpc::status::bad_frame, "dot requires 2 input tensors"));
+    }
+
+    auto input_request = tensor_rpc::tensor_request{
+        .dtype = request.input_dtype,
+        .domain_type = request.domain_type,
+        .output_affine = {},
+        .operands = request.operands,
+    };
+    auto inputs_result = tensor_rpc::build_tensor_parameters(input_request, mem);
+    if (!inputs_result) {
+        return std::unexpected(inputs_result.error());
+    }
+    auto& inputs = inputs_result.value().inputs;
+
+    return std::visit(
+        [&](auto& lhs) -> command_result<dot_parameters> {
+            using lhs_type = std::remove_cvref_t<decltype(lhs)>;
+            auto* rhs = std::get_if<lhs_type>(&inputs[1]);
+            if (rhs == nullptr) {
+                return std::unexpected(tensor_rpc::make_error(
+                    rpc::status::bad_frame, "dot operand tensor types must match"));
+            }
+            if (lhs.shape() != rhs->shape()) {
+                return std::unexpected(tensor_rpc::make_error(rpc::status::bad_frame,
+                                                              "dot operand shapes must match"));
+            }
+
+            constexpr auto output_shape = tensor_shape<1>{1};
+
+            auto make_dot = [&]<class OutputDomain>(
+                                OutputDomain output_domain) -> command_result<dot_parameters> {
+                tensor<OutputDomain, tensor_shape<1>> out(output_shape, output_domain, mem);
+                return dot_parameters{
+                    .invoke = [lhs_moved = std::move(lhs), rhs_moved = std::move(*rhs),
+                               out_moved = std::move(out)]() mutable -> rpc::result {
+                        try {
+                            linear_algebra::dot(tensor_view(lhs_moved), tensor_view(rhs_moved),
+                                                tensor_view(out_moved));
+                        } catch (const std::invalid_argument& error) {
+                            return tensor_rpc::make_error(rpc::status::error, error.what());
+                        }
+                        return encode_tensor_payload(out_moved);
+                    },
+                };
+            };
+
+            if constexpr (std::same_as<typename lhs_type::domain_type, tensor_rpc::no_quant>) {
+                if (request.output_dtype != tensor_rpc::wire_dtype::float32) {
+                    return std::unexpected(tensor_rpc::make_error(
+                        rpc::status::bad_frame, "float dot output must be float32"));
+                }
+                return make_dot(tensor_rpc::no_quant{});
+            } else if constexpr (std::same_as<typename lhs_type::domain_type,
+                                              tensor_rpc::fixed_point_s8>) {
+                if (request.output_dtype == tensor_rpc::wire_dtype::int8) {
+                    return make_dot(tensor_rpc::fixed_point_s8{});
+                }
+                return std::unexpected(tensor_rpc::make_error(rpc::status::bad_frame,
+                                                              "unsupported s8 dot output dtype"));
+            } else if constexpr (std::same_as<typename lhs_type::domain_type,
+                                              tensor_rpc::fixed_point_s16>) {
+                if (request.output_dtype == tensor_rpc::wire_dtype::int16) {
+                    return make_dot(tensor_rpc::fixed_point_s16{});
+                }
+                return std::unexpected(tensor_rpc::make_error(rpc::status::bad_frame,
+                                                              "unsupported s16 dot output dtype"));
+            } else {
+                return std::unexpected(
+                    tensor_rpc::make_error(rpc::status::bad_frame, "unsupported dot input domain"));
+            }
+        },
+        inputs[0]);
+}
+
+[[nodiscard]] rpc::result handle_dot(std::span<const std::uint8_t> request) {
+    auto caps = esp::memory::capabilities::internal | esp::memory::capabilities::addressable_8bit |
+                esp::memory::accelerator_capabilities();
+    esp::memory::accelerator_resource mem{caps};
+
+    auto result = tensor_rpc::decode_dot_tensor_request(request).and_then(
+        [&](const tensor_rpc::dot_request& decoded) {
+            return prepare_dot_parameters(decoded, &mem);
+        });
+
+    if (!result) {
+        return result.error();
+    }
+    return result.value().invoke();
 }
 
 } // namespace
@@ -151,6 +249,7 @@ prepare_add_parameters(tensor_rpc::tensor_parameters params, std::pmr::memory_re
 constexpr std::array commands = {
     rpc::command{.name = "rpc.ping", .fn = &handle_ping},
     rpc::command{.name = "arith.add", .fn = &handle_add},
+    rpc::command{.name = "linear_algebra.dot", .fn = &handle_dot},
 };
 
 std::span<const rpc::command> get_commands() { return commands; }

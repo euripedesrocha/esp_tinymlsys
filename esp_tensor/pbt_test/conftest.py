@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
+
+from rpc import RpcClient
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -24,3 +28,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if "rpc_transport" in item.keywords and not config.getoption("--run-rpc-transport"):
             item.add_marker(skip_rpc_transport)
+
+
+@pytest.fixture
+def rpc_client(dut) -> Iterator[RpcClient]:
+    with RpcClient(dut.serial) as client:
+        yield client

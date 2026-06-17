@@ -24,6 +24,15 @@ class BinaryElementwiseCase:
     rhs_data: list[int] | list[float]
 
 
+@dataclass(frozen=True)
+class DotCase:
+    lhs: TensorDescriptor
+    rhs: TensorDescriptor
+    out: TensorDescriptor
+    lhs_data: list[int] | list[float]
+    rhs_data: list[int] | list[float]
+
+
 def rpc_settings(max_examples: int):
     return settings(
         deadline=None,
@@ -118,6 +127,20 @@ def _float_element() -> st.SearchStrategy[float]:
     )
 
 
+def _dot_float_element() -> st.SearchStrategy[float]:
+    edge_values = [-16.0, -1.0, -0.0, 0.0, 1e-3, 1.0, 16.0]
+    return st.one_of(
+        st.sampled_from(edge_values),
+        st.floats(
+            min_value=-16.0,
+            max_value=16.0,
+            allow_nan=False,
+            allow_infinity=False,
+            width=32,
+        ),
+    )
+
+
 def _bounds(dtype: str) -> tuple[int, int]:
     match dtype:
         case "s8":
@@ -138,6 +161,15 @@ def vector(
         min_value, max_value = _bounds(dtype)
         element = _integer_element(min_value, max_value)
     return st.lists(element, min_size=size, max_size=size)
+
+
+def dot_vector(
+    shape: tuple[int, ...], *, dtype: str
+) -> st.SearchStrategy[list[int] | list[float]]:
+    size = _element_count(shape)
+    if dtype == F32:
+        return st.lists(_dot_float_element(), min_size=size, max_size=size)
+    return vector(shape, dtype=dtype)
 
 
 def _realistic_affine_scale() -> st.SearchStrategy[float]:
@@ -272,6 +304,44 @@ def binary_elementwise_case(tensor_type: TensorType) -> st.SearchStrategy[Binary
             ),
         )
         assert _valid_binary_elementwise_case(case)
+        return case
+
+    return draw_case()
+
+
+def _valid_dot_case(case: DotCase) -> bool:
+    same_input_type = case.lhs.tensor_type == case.rhs.tensor_type
+    same_input_shape = case.lhs.shape == case.rhs.shape
+    scalar_output = case.out.shape == (1,)
+    same_payload_size = (
+        len(case.lhs_data) == len(case.rhs_data) == _element_count(case.lhs.shape)
+    )
+    no_affine = (
+        case.lhs.affine is None
+        and case.rhs.affine is None
+        and case.out.affine is None
+    )
+    return (
+        same_input_type
+        and same_input_shape
+        and scalar_output
+        and same_payload_size
+        and no_affine
+    )
+
+
+def dot_case(tensor_type: TensorType) -> st.SearchStrategy[DotCase]:
+    @st.composite
+    def draw_case(draw: st.DrawFn) -> DotCase:
+        input_shape = draw(shape())
+        case = DotCase(
+            lhs=_tensor_descriptor(tensor_type, input_shape, None),
+            rhs=_tensor_descriptor(tensor_type, input_shape, None),
+            out=_tensor_descriptor(tensor_type, (1,), None),
+            lhs_data=draw(dot_vector(input_shape, dtype=tensor_type.strategy_dtype), label="lhs"),
+            rhs_data=draw(dot_vector(input_shape, dtype=tensor_type.strategy_dtype), label="rhs"),
+        )
+        assert _valid_dot_case(case)
         return case
 
     return draw_case()

@@ -23,7 +23,7 @@ template <class T> struct other_domain {
 
 template <class Lhs, class Rhs, class Out>
 concept add_invocable = requires(Lhs&& lhs, Rhs&& rhs, Out&& out) {
-    add(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs), std::forward<Out>(out));
+    arith::add(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs), std::forward<Out>(out));
 };
 
 } // namespace
@@ -43,7 +43,7 @@ TEST_CASE("no quantization add uses the reference arithmetic path", "[ops]") {
     auto lhs_view = tensor_view(lhs, shape);
     auto rhs_view = tensor_view(rhs, shape);
     auto out_view = tensor_view(out, shape);
-    add(lhs_view, rhs_view, out_view);
+    arith::add(lhs_view, rhs_view, out_view);
 
     REQUIRE(out[0] == 32.0F);
     REQUIRE(out[1] == -32.0F);
@@ -59,7 +59,7 @@ TEST_CASE("no quantization add supports floating point tensors", "[ops]") {
     auto lhs_view = tensor_view(lhs, shape);
     auto rhs_view = tensor_view(rhs, shape);
     auto out_view = tensor_view(out, shape);
-    add(lhs_view, rhs_view, out_view);
+    arith::add(lhs_view, rhs_view, out_view);
 
     REQUIRE(out[0] == 0.75F);
     REQUIRE(out[1] == -0.75F);
@@ -86,6 +86,19 @@ TEST_CASE("add accepts view operands and rejects owning tensors", "[ops]") {
     STATIC_REQUIRE_FALSE(add_invocable<owner_type&, owner_type&, owner_type&>);
 }
 
+TEST_CASE("add rejects mixed value types", "[ops]") {
+    auto f32 = std::to_array<float>({1.0F});
+    auto f64 = std::to_array<double>({1.0});
+    auto out = std::to_array<float>({0.0F});
+    const auto shape = tensor_shape{1};
+
+    using f32_view = decltype(tensor_view(f32, shape, domain::no_quantization<float>{}));
+    using f64_view = decltype(tensor_view(f64, shape, domain::no_quantization<double>{}));
+    using out_view = decltype(tensor_view(out, shape, domain::no_quantization<float>{}));
+
+    STATIC_REQUIRE_FALSE(add_invocable<f32_view, f64_view, out_view>);
+}
+
 TEST_CASE("add accepts const-backed input views", "[ops]") {
     constexpr auto lhs = std::to_array<float>({12.0F, -12.0F, 5.0F});
     constexpr auto rhs = std::to_array<float>({20.0F, -20.0F, -8.0F});
@@ -95,7 +108,7 @@ TEST_CASE("add accepts const-backed input views", "[ops]") {
     auto lhs_view = tensor_view(lhs, shape);
     auto rhs_view = tensor_view(rhs, shape);
     auto out_view = tensor_view(out, shape);
-    add(lhs_view, rhs_view, out_view);
+    arith::add(lhs_view, rhs_view, out_view);
 
     REQUIRE(out[0] == 32.0F);
     REQUIRE(out[1] == -32.0F);
@@ -113,7 +126,7 @@ TEST_CASE("add combines constexpr array views with owning tensor views", "[ops]"
     auto lhs_view = tensor_view(lhs, tensor_shape{3});
     auto rhs_view = tensor_view(rhs);
     auto out_view = tensor_view(out);
-    add(lhs_view, rhs_view, out_view);
+    arith::add(lhs_view, rhs_view, out_view);
 
     REQUIRE(out.data()[0] == 32.0F);
     REQUIRE(out.data()[1] == -32.0F);
@@ -128,7 +141,7 @@ TEST_CASE("no quantization add validates matching runtime input shapes", "[ops]"
     auto lhs_view = tensor_view(lhs, tensor_shape{2});
     auto rhs_view = tensor_view(rhs, tensor_shape{3});
     auto out_view = tensor_view(out, tensor_shape{2});
-    REQUIRE_THROWS_MATCHES(add(lhs_view, rhs_view, out_view), std::invalid_argument,
+    REQUIRE_THROWS_MATCHES(arith::add(lhs_view, rhs_view, out_view), std::invalid_argument,
                            Catch::Matchers::Message("tensor add requires matching input shapes"));
 }
 
@@ -141,6 +154,6 @@ TEST_CASE("no quantization add validates the output runtime shape", "[ops]") {
     auto rhs_view = tensor_view(rhs, tensor_shape{2});
     auto out_view = tensor_view(out, tensor_shape{3});
     REQUIRE_THROWS_MATCHES(
-        add(lhs_view, rhs_view, out_view), std::invalid_argument,
+        arith::add(lhs_view, rhs_view, out_view), std::invalid_argument,
         Catch::Matchers::Message("tensor add requires output shape to match inputs"));
 }

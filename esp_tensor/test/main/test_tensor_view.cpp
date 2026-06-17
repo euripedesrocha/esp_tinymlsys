@@ -249,3 +249,58 @@ TEST_CASE("tensor view rejects tensor-like sources smaller than the requested sh
         Catch::Matchers::Message(
             "tensor_view source range is smaller than the logical tensor shape"));
 }
+
+TEST_CASE("tensor view default constructs to empty", "[tensor_view]") {
+    tensor_view<float, domain::no_quantization<float>, tensor_shape<2>> view;
+
+    STATIC_REQUIRE(decltype(view)::rank() == 2);
+    REQUIRE(view.empty());
+}
+
+TEST_CASE("tensor view constructs from tensor with fixed point domain", "[tensor_view]") {
+    tensor values(tensor_shape{2, 2}, domain::fixed_point<std::int16_t>{});
+    values.data()[0] = 1;
+    values.data()[1] = 2;
+    values.data()[2] = 3;
+    values.data()[3] = 4;
+
+    tensor_view view(values);
+
+    STATIC_REQUIRE(std::same_as<decltype(view)::domain_type, domain::fixed_point<std::int16_t>>);
+    STATIC_REQUIRE(std::same_as<decltype(view)::element_type, std::int16_t>);
+    REQUIRE(view.data() == values.data());
+    REQUIRE(view.shape() == values.shape());
+    REQUIRE(view[1, 0] == 3);
+}
+
+TEST_CASE("tensor view from const tensor preserves const element type", "[tensor_view]") {
+    const tensor values(tensor_shape{2, 2}, domain::no_quantization<float>{});
+
+    tensor_view view(values);
+
+    STATIC_REQUIRE(std::same_as<decltype(view)::element_type, const float>);
+    STATIC_REQUIRE(std::same_as<decltype(view.data()), const float*>);
+    STATIC_REQUIRE(std::same_as<decltype(view[0, 0]), const float&>);
+    REQUIRE(view.data() == values.data());
+}
+
+TEST_CASE("tensor view accepts ranges larger than the requested shape", "[tensor_view]") {
+    auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F, 5.0F});
+
+    tensor_view view(values, tensor_shape{2, 2}, domain::no_quantization<float>{});
+
+    REQUIRE(view.data() == values.data());
+    REQUIRE(view.size() == 4);
+    REQUIRE(view[1, 1] == 4.0F);
+}
+
+TEST_CASE("tensor view deduces one dimensional shape from range", "[tensor_view]") {
+    auto values = std::to_array<std::int8_t>({1, 2, 3, 4});
+
+    tensor_view view(values, domain::fixed_point<std::int8_t>{});
+
+    STATIC_REQUIRE(decltype(view)::rank() == 1);
+    REQUIRE(view.shape() == tensor_shape{4});
+    REQUIRE(view.size() == 4);
+    REQUIRE(view[2] == 3);
+}

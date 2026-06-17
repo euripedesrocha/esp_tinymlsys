@@ -4,6 +4,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <numeric>
 #include <ranges>
 #include <type_traits>
 
@@ -18,7 +19,7 @@ namespace esp::tensor::detail {
 namespace esp32s3 {
 
 template <class T>
-concept accelerated_fixed_point = std::same_as<T, std::int8_t> || std::same_as<T, std::int16_t>;
+concept accelerated_fixed_point = same_as_any<T, std::int8_t, std::int16_t>;
 
 inline void add(const fixed_point_tensor_view auto lhs, const fixed_point_tensor_view auto rhs,
                 fixed_point_tensor_view auto out) {
@@ -54,8 +55,7 @@ inline void add(const fixed_point_tensor_view auto lhs, const fixed_point_tensor
                    rhs.begin() + static_cast<std::ptrdiff_t>(processed),
                    out.begin() + static_cast<std::ptrdiff_t>(processed),
                    [](const value_type lhs_value, const value_type rhs_value) {
-                       return detail::saturate_cast<value_type>(detail::widen(lhs_value) +
-                                                                detail::widen(rhs_value));
+                       return std::saturating_add<value_type>(lhs_value, rhs_value);
                    });
 }
 
@@ -68,9 +68,8 @@ namespace esp::tensor {
 /**
  * @brief Implements elementwise add for fixed-point tensor views.
  *
- * This widens both inputs, adds them, and saturating-narrows the result back
- * to the fixed-point storage type after the facade has validated shared
- * preconditions.
+ * Scalar elements are added with standard saturating arithmetic after the
+ * facade has validated shared preconditions.
  *
  */
 inline void add_impl(const detail::fixed_point_tensor_view auto lhs,
@@ -83,8 +82,7 @@ inline void add_impl(const detail::fixed_point_tensor_view auto lhs,
     } else {
         std::ranges::transform(lhs, rhs, out.begin(),
                                [](const value_type lhs_value, const value_type rhs_value) {
-                                   return detail::saturate_cast<value_type>(
-                                       detail::widen(lhs_value) + detail::widen(rhs_value));
+                                   return std::saturating_add<value_type>(lhs_value, rhs_value);
                                });
     }
 }

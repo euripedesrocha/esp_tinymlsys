@@ -29,6 +29,9 @@ using range_element_t = std::remove_reference_t<std::ranges::range_reference_t<R
 template <class T, template <class...> class Template>
 concept specialization_of = detail::is_specialization_of<std::remove_cvref_t<T>, Template>::value;
 
+template <class T, class... U>
+concept same_as_any = (std::same_as<T, U> || ...);
+
 template <class T>
 concept tensor_signature =
     requires {
@@ -79,5 +82,11 @@ template <class First, class... Rest>
 concept same_tensor_shape = (std::same_as<typename std::remove_cvref_t<First>::shape_type,
                                           typename std::remove_cvref_t<Rest>::shape_type> &&
                              ...);
+
+template <class First, class... Rest>
+concept same_tensor_value_type =
+    (std::same_as<typename std::remove_cvref_t<First>::domain_type::value_type,
+                  typename std::remove_cvref_t<Rest>::domain_type::value_type> &&
+     ...);
 
 } // namespace esp::tensor

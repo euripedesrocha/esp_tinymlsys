@@ -7,6 +7,7 @@ from hypothesis import given
 
 import tensor_pbt_strategies as strategy
 import tensor_references as reference
+import tensor_test_helpers as helpers
 from rpc import RpcClient
 import tensor_rpc
 
@@ -17,81 +18,6 @@ ADD_CASES = [
     tensor_rpc.AFFINE_S8,
     tensor_rpc.NO_QUANT_F32,
 ]
-
-BOUNDARY_SHAPES = [
-    (0,),
-    (1,),
-    (15,),
-    (16,),
-    (17,),
-    (31,),
-    (32,),
-    (33,),
-    (63,),
-    (64,),
-    (65,),
-    (127,),
-    (128,),
-    (129,),
-    (255,),
-    (256,),
-    (257,),
-    (511,),
-    (512,),
-    (513,),
-    (1023,),
-    (1024,),
-    (4, 4),
-    (8, 8),
-    (16, 16),
-    (4, 4, 4),
-    (8, 8, 2),
-    (4, 4, 4, 4),
-]
-
-
-def _element_count(shape: tuple[int, ...]) -> int:
-    count = 1
-    for extent in shape:
-        count *= extent
-    return count
-
-
-def _affine_domains() -> tuple[
-    tensor_rpc.AffineDomain, tensor_rpc.AffineDomain, tensor_rpc.AffineDomain
-]:
-    return (
-        tensor_rpc.AffineDomain(scale=1 / 128, zero_point=-7),
-        tensor_rpc.AffineDomain(scale=1 / 64, zero_point=5),
-        tensor_rpc.AffineDomain(scale=1 / 128, zero_point=-3),
-    )
-
-
-def _descriptor(
-    tensor_type: tensor_rpc.TensorType,
-    shape: tuple[int, ...],
-    affine: tensor_rpc.AffineDomain | None = None,
-) -> tensor_rpc.TensorDescriptor:
-    return tensor_rpc.TensorDescriptor(tensor_type=tensor_type, shape=shape, affine=affine)
-
-
-def _boundary_data(tensor_type: tensor_rpc.TensorType, size: int) -> tuple[list, list]:
-    if tensor_type.strategy_dtype == strategy.F32:
-        lhs_pattern = [-1e6, -1.0, -0.0, 0.0, 1e-6, 1.0, 1e6]
-        rhs_pattern = [1e6, 1.0, 0.0, -0.0, -1e-6, -1.0, -1e6]
-    elif tensor_type.strategy_dtype == strategy.S16:
-        lhs_pattern = [-32768, -32767, -1, 0, 1, 32766, 32767]
-        rhs_pattern = [-1, 1, -32768, 0, 32767, 1, 1]
-    elif tensor_type.strategy_dtype == strategy.S8:
-        lhs_pattern = [-128, -127, -1, 0, 1, 126, 127]
-        rhs_pattern = [-1, 1, -128, 0, 127, 1, 1]
-    else:
-        raise AssertionError(f"unsupported strategy dtype: {tensor_type.strategy_dtype}")
-
-    lhs = [lhs_pattern[index % len(lhs_pattern)] for index in range(size)]
-    rhs = [rhs_pattern[index % len(rhs_pattern)] for index in range(size)]
-    return lhs, rhs
-
 
 def _expected_add(case: strategy.BinaryElementwiseCase) -> list:
     tensor_type = case.out.tensor_type
@@ -153,43 +79,42 @@ def _run_add_case(rpc_client: RpcClient, case: strategy.BinaryElementwiseCase) -
 @pytest.mark.supported_targets
 @pytest.mark.generic
 @idf_parametrize("target", ["esp32s3"], indirect=["target"])
-def test_tensor_add_properties_match_references(dut, request: pytest.FixtureRequest) -> None:
+def test_tensor_add_properties_match_references(
+    rpc_client: RpcClient, request: pytest.FixtureRequest
+) -> None:
     max_examples = request.config.getoption("--pbt-examples")
 
-    with RpcClient(dut.serial) as rpc_client:
+    def run_case(tensor_type: tensor_rpc.TensorType) -> None:
+        @strategy.rpc_settings(max_examples=max_examples)
+        @given(strategy.binary_elementwise_case(tensor_type))
+        def run(case: strategy.BinaryElementwiseCase) -> None:
+            _run_add_case(rpc_client, case)
 
-        def run_case(tensor_type: tensor_rpc.TensorType) -> None:
-            @strategy.rpc_settings(max_examples=max_examples)
-            @given(strategy.binary_elementwise_case(tensor_type))
-            def run(case: strategy.BinaryElementwiseCase) -> None:
-                _run_add_case(rpc_client, case)
+        run()
 
-            run()
-
-        for tensor_type in ADD_CASES:
-            run_case(tensor_type)
+    for tensor_type in ADD_CASES:
+        run_case(tensor_type)
 
 
 @pytest.mark.supported_targets
 @pytest.mark.generic
 @idf_parametrize("target", ["esp32s3"], indirect=["target"])
-def test_tensor_add_boundary_shapes_match_references(dut) -> None:
-    with RpcClient(dut.serial) as rpc_client:
-        for tensor_type in ADD_CASES:
-            for shape in BOUNDARY_SHAPES:
-                size = _element_count(shape)
-                lhs_data, rhs_data = _boundary_data(tensor_type, size)
+def test_tensor_add_boundary_shapes_match_references(rpc_client: RpcClient) -> None:
+    for tensor_type in ADD_CASES:
+        for shape in helpers.BOUNDARY_SHAPES:
+            size = helpers.element_count(shape)
+            lhs_data, rhs_data = helpers.boundary_data(tensor_type, size)
 
-                lhs_affine = rhs_affine = out_affine = None
-                if tensor_type.domain_type == tensor_rpc.DomainType.AFFINE:
-                    lhs_affine, rhs_affine, out_affine = _affine_domains()
+            lhs_affine = rhs_affine = out_affine = None
+            if tensor_type.domain_type == tensor_rpc.DomainType.AFFINE:
+                lhs_affine, rhs_affine, out_affine = helpers.affine_domains()
 
-                case = strategy.BinaryElementwiseCase(
-                    lhs=_descriptor(tensor_type, shape, lhs_affine),
-                    rhs=_descriptor(tensor_type, shape, rhs_affine),
-                    out=_descriptor(tensor_type, shape, out_affine),
-                    lhs_data=lhs_data,
-                    rhs_data=rhs_data,
-                )
+            case = strategy.BinaryElementwiseCase(
+                lhs=helpers.descriptor(tensor_type, shape, lhs_affine),
+                rhs=helpers.descriptor(tensor_type, shape, rhs_affine),
+                out=helpers.descriptor(tensor_type, shape, out_affine),
+                lhs_data=lhs_data,
+                rhs_data=rhs_data,
+            )
 
-                _run_add_case(rpc_client, case)
+            _run_add_case(rpc_client, case)

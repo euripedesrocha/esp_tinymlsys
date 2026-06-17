@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <memory_resource>
+#include <utility>
 
 #include "esp_tensor.hpp"
 #include "esp_tensor_domain.hpp"
@@ -74,7 +75,7 @@ TEST_CASE("tensor supports range based fill and iteration", "[tensor]") {
         value = next++;
     }
 
-    const decltype(values)& const_values = values;
+    const auto& const_values = std::as_const(values);
     float sum = 0;
     for (const auto value : const_values) {
         sum += value;
@@ -142,4 +143,63 @@ TEST_CASE("tensor copy assignment preserves source memory resource", "[tensor]")
     REQUIRE(destination.shape() == source.shape());
     REQUIRE(destination.data()[0] == 7);
     REQUIRE(destination.data()[3] == 9);
+}
+
+TEST_CASE("tensor move construction transfers storage and metadata", "[tensor]") {
+    tensor source(tensor_shape{2, 2}, test_domain{});
+    source.data()[0] = 1;
+    source.data()[3] = 4;
+
+    const auto* source_data = source.data();
+    tensor moved(std::move(source));
+
+    STATIC_REQUIRE(std::same_as<decltype(moved)::domain_type, test_domain>);
+    REQUIRE(moved.data() == source_data);
+    REQUIRE(moved.size() == 4);
+    REQUIRE(moved.shape() == tensor_shape{2, 2});
+    REQUIRE(moved.data()[0] == 1);
+    REQUIRE(moved.data()[3] == 4);
+}
+
+TEST_CASE("tensor move assignment transfers storage and metadata", "[tensor]") {
+    tensor source(tensor_shape{2, 2}, test_domain{});
+    tensor destination(tensor_shape{1, 1}, test_domain{});
+    source.data()[0] = 1;
+    source.data()[3] = 4;
+
+    const auto* source_data = source.data();
+    destination = std::move(source);
+
+    REQUIRE(destination.data() == source_data);
+    REQUIRE(destination.size() == 4);
+    REQUIRE(destination.shape() == tensor_shape{2, 2});
+    REQUIRE(destination.data()[0] == 1);
+    REQUIRE(destination.data()[3] == 4);
+}
+
+TEST_CASE("tensor supports fixed point domain", "[tensor]") {
+    tensor values(tensor_shape{2, 3}, domain::fixed_point<std::int16_t>{});
+
+    STATIC_REQUIRE(std::same_as<decltype(values)::domain_type, domain::fixed_point<std::int16_t>>);
+    STATIC_REQUIRE(std::same_as<typename decltype(values)::domain_type::value_type, std::int16_t>);
+    REQUIRE(values.size() == 6);
+    REQUIRE(values.shape() == tensor_shape{2, 3});
+}
+
+TEST_CASE("tensor supports affine domain", "[tensor]") {
+    tensor values(tensor_shape{2, 3}, domain::affine<>{.scale = 0.5F, .zero_point = 10});
+
+    STATIC_REQUIRE(std::same_as<decltype(values)::domain_type, domain::affine<>>);
+    STATIC_REQUIRE(std::same_as<typename decltype(values)::domain_type::value_type, std::int8_t>);
+    REQUIRE(values.size() == 6);
+    REQUIRE(values.domain().scale == 0.5F);
+    REQUIRE(values.domain().zero_point == 10);
+}
+
+TEST_CASE("tensor domain is const correct", "[tensor]") {
+    const tensor values(tensor_shape{2, 2}, domain::affine<>{.scale = 0.5F, .zero_point = 10});
+
+    STATIC_REQUIRE(std::same_as<decltype(values.domain()), const domain::affine<>&>);
+    REQUIRE(values.domain().scale == 0.5F);
+    REQUIRE(values.domain().zero_point == 10);
 }

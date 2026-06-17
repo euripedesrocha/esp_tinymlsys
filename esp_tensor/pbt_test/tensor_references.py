@@ -108,3 +108,48 @@ def f32_add(lhs: list[float], rhs: list[float]) -> list[float]:
     if len(lhs) != len(rhs):
         raise ValueError("lhs and rhs must have the same length")
     return [_f32(_f32(a) + _f32(b)) for a, b in zip(lhs, rhs)]
+
+
+def f32_dot(lhs: list[float], rhs: list[float]) -> list[float]:
+    if len(lhs) != len(rhs):
+        raise ValueError("lhs and rhs must have the same length")
+    total = 0.0
+    for a, b in zip(lhs, rhs):
+        total = _f32(total + _f32(_f32(a) * _f32(b)))
+    return [_f32(total)]
+
+
+def _saturating_cast(value: int, min_value: int, max_value: int) -> int:
+    return max(min_value, min(max_value, value))
+
+
+def _scale_raw_fixed_point_dot(value: int, input_bits: int, output_bits: int,
+                               output_min: int, output_max: int) -> int:
+    shift = 2 * input_bits - output_bits
+    if shift > 0:
+        rounded = (value + (1 << (shift - 1))) >> shift
+        return _saturating_cast(rounded, output_min, output_max)
+    if shift < 0:
+        left_shift = -shift
+        lower = output_min >> left_shift
+        upper = output_max >> left_shift
+        if value < lower:
+            return output_min
+        if value > upper:
+            return output_max
+        return value << left_shift
+    return _saturating_cast(value, output_min, output_max)
+
+
+def fixed_point_dot_s8_to_s8(lhs: list[int], rhs: list[int]) -> list[int]:
+    if len(lhs) != len(rhs):
+        raise ValueError("lhs and rhs must have the same length")
+    total = sum(a * b for a, b in zip(lhs, rhs))
+    return [_scale_raw_fixed_point_dot(total, 7, 7, -128, 127)]
+
+
+def fixed_point_dot_s16_to_s16(lhs: list[int], rhs: list[int]) -> list[int]:
+    if len(lhs) != len(rhs):
+        raise ValueError("lhs and rhs must have the same length")
+    total = sum(a * b for a, b in zip(lhs, rhs))
+    return [_scale_raw_fixed_point_dot(total, 15, 15, -32768, 32767)]
