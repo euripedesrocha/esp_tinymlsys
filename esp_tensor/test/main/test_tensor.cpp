@@ -90,17 +90,17 @@ TEST_CASE("tensor supports range based fill and iteration", "[tensor]") {
 }
 
 TEST_CASE("tensor supports multidimensional indexing", "[tensor]") {
-    tensor values(tensor_shape{2, 2}, domain::no_quantization<std::int16_t>{});
+    tensor values(tensor_shape{2, 2}, domain::no_quantization<float>{});
 
-    values.data()[0] = 1;
-    values.data()[1] = 2;
-    values.data()[2] = 3;
-    values.data()[3] = 4;
+    values.data()[0] = 1.0F;
+    values.data()[1] = 2.0F;
+    values.data()[2] = 3.0F;
+    values.data()[3] = 4.0F;
 
-    REQUIRE(values[0, 0] == 1);
-    REQUIRE(values[0, 1] == 2);
-    REQUIRE(values[1, 0] == 3);
-    REQUIRE(values[1, 1] == 4);
+    REQUIRE(values[0, 0] == 1.0F);
+    REQUIRE(values[0, 1] == 2.0F);
+    REQUIRE(values[1, 0] == 3.0F);
+    REQUIRE(values[1, 1] == 4.0F);
 }
 
 TEST_CASE("tensor preserves zero extent semantics", "[tensor]") {

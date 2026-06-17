@@ -24,9 +24,9 @@ struct calibration_domain {
 };
 
 struct broken_tensor_like {
-    using domain_type = domain::no_quantization<std::int16_t>;
+    using domain_type = domain::no_quantization<float>;
     using shape_type = tensor_shape<2>;
-    domain_type::value_type* storage = nullptr;
+    float* storage = nullptr;
     std::size_t logical_size = 0;
     shape_type logical_shape;
     domain_type logical_domain{};
@@ -81,7 +81,7 @@ TEST_CASE("tensor view carries unconstrained domain metadata", "[tensor_view]") 
 }
 
 TEST_CASE("tensor view accepts one-dimensional contiguous spans", "[tensor_view]") {
-    auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
+    auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
 
     tensor_view vector_view(std::span{values});
     REQUIRE(vector_view.data() == values.data());
@@ -91,21 +91,21 @@ TEST_CASE("tensor view accepts one-dimensional contiguous spans", "[tensor_view]
 }
 
 TEST_CASE("tensor view supports flat iteration over contiguous storage", "[tensor_view]") {
-    auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
-    tensor_view view(values, tensor_shape{2, 2}, domain::no_quantization<std::int16_t>{});
+    auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
+    tensor_view view(values, tensor_shape{2, 2}, domain::no_quantization<float>{});
     using const_iterator = decltype(std::as_const(view).begin());
     using const_reference = decltype(std::as_const(view)[0, 0]);
 
-    STATIC_REQUIRE(std::same_as<const_iterator, const std::int16_t*>);
-    STATIC_REQUIRE(std::same_as<const_reference, const std::int16_t&>);
+    STATIC_REQUIRE(std::same_as<const_iterator, const float*>);
+    STATIC_REQUIRE(std::same_as<const_reference, const float&>);
 
-    std::int16_t next = 10;
+    float next = 10.0F;
     for (auto& value : view) {
         value = next++;
     }
 
     const auto& const_view = view;
-    std::int32_t sum = 0;
+    float sum = 0.0F;
     for (const auto value : const_view) {
         sum += value;
     }
@@ -115,50 +115,48 @@ TEST_CASE("tensor view supports flat iteration over contiguous storage", "[tenso
     REQUIRE(view.end() - view.begin() == static_cast<std::ptrdiff_t>(view.size()));
     REQUIRE(const_view.begin() == values.data());
     REQUIRE(const_view.end() == values.data() + values.size());
-    REQUIRE(sum == 46);
-    REQUIRE(values == std::array<std::int16_t, 4>{10, 11, 12, 13});
+    REQUIRE(sum == 46.0F);
+    REQUIRE(values == std::array<float, 4>{10.0F, 11.0F, 12.0F, 13.0F});
 }
 
 TEST_CASE("tensor view accepts explicit shapes over spans", "[tensor_view]") {
-    auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
-    std::span<std::int16_t> values_span(values);
-    tensor_view matrix_view(values_span, tensor_shape{2, 2},
-                            domain::no_quantization<std::int16_t>{});
+    auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
+    std::span<float> values_span(values);
+    tensor_view matrix_view(values_span, tensor_shape{2, 2}, domain::no_quantization<float>{});
 
     REQUIRE(matrix_view.data() == values.data());
     REQUIRE(matrix_view.shape() == tensor_shape{2, 2});
     REQUIRE(matrix_view.size() == 4);
-    REQUIRE(matrix_view[1, 0] == 3);
+    REQUIRE(matrix_view[1, 0] == 3.0F);
 
-    matrix_view[1, 0] = 7;
-    REQUIRE(values[2] == 7);
+    matrix_view[1, 0] = 7.0F;
+    REQUIRE(values[2] == 7.0F);
 }
 
 TEST_CASE("tensor view deduces no-quantization domain from explicit shapes", "[tensor_view]") {
-    auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
+    auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
 
     tensor_view matrix_view(values, tensor_shape{2, 2});
 
     STATIC_REQUIRE(
-        std::same_as<decltype(matrix_view)::domain_type, domain::no_quantization<std::int16_t>>);
+        std::same_as<decltype(matrix_view)::domain_type, domain::no_quantization<float>>);
     REQUIRE(matrix_view.shape() == tensor_shape{2, 2});
-    REQUIRE(matrix_view[1, 0] == 3);
+    REQUIRE(matrix_view[1, 0] == 3.0F);
 }
 
 TEST_CASE("tensor view preserves const storage from contiguous sources", "[tensor_view]") {
-    constexpr auto values = std::to_array<std::int16_t>({1, 2, 3, 4});
+    constexpr auto values = std::to_array<float>({1.0F, 2.0F, 3.0F, 4.0F});
 
     tensor_view view(values, tensor_shape{2, 2});
 
-    STATIC_REQUIRE(
-        std::same_as<decltype(view)::domain_type, domain::no_quantization<std::int16_t>>);
-    STATIC_REQUIRE(std::same_as<decltype(view)::element_type, const std::int16_t>);
-    STATIC_REQUIRE(std::same_as<decltype(view.data()), const std::int16_t*>);
-    STATIC_REQUIRE(std::same_as<decltype(view.begin()), const std::int16_t*>);
-    STATIC_REQUIRE(std::same_as<decltype(view[0, 0]), const std::int16_t&>);
+    STATIC_REQUIRE(std::same_as<decltype(view)::domain_type, domain::no_quantization<float>>);
+    STATIC_REQUIRE(std::same_as<decltype(view)::element_type, const float>);
+    STATIC_REQUIRE(std::same_as<decltype(view.data()), const float*>);
+    STATIC_REQUIRE(std::same_as<decltype(view.begin()), const float*>);
+    STATIC_REQUIRE(std::same_as<decltype(view[0, 0]), const float&>);
     REQUIRE(view.data() == values.data());
     REQUIRE(view.shape() == tensor_shape{2, 2});
-    REQUIRE(view[1, 0] == 3);
+    REQUIRE(view[1, 0] == 3.0F);
 }
 
 TEST_CASE("tensor view can be constructed as a constant expression", "[tensor_view]") {
@@ -176,28 +174,27 @@ TEST_CASE("tensor view can be constructed as a constant expression", "[tensor_vi
 }
 
 TEST_CASE("tensor view preserves zero extent semantics", "[tensor_view]") {
-    std::array<std::int16_t, 1> values = {42};
-    tensor_view<std::int16_t, domain::no_quantization<std::int16_t>, tensor_shape<2>> empty(
-        values, tensor_shape{0, 3});
+    std::array<float, 1> values = {42.0F};
+    tensor_view<float, domain::no_quantization<float>, tensor_shape<2>> empty(values,
+                                                                              tensor_shape{0, 3});
 
     REQUIRE(empty.shape() == tensor_shape{0, 3});
     REQUIRE(empty.empty());
 }
 
 TEST_CASE("tensor view constructs from tensor owners", "[tensor_view]") {
-    tensor values(tensor_shape{2, 2}, domain::no_quantization<std::int16_t>{});
-    values.data()[0] = 1;
-    values.data()[1] = 2;
-    values.data()[2] = 3;
-    values.data()[3] = 4;
+    tensor values(tensor_shape{2, 2}, domain::no_quantization<float>{});
+    values.data()[0] = 1.0F;
+    values.data()[1] = 2.0F;
+    values.data()[2] = 3.0F;
+    values.data()[3] = 4.0F;
 
     tensor_view view(values);
 
-    STATIC_REQUIRE(
-        std::same_as<decltype(view)::domain_type, domain::no_quantization<std::int16_t>>);
+    STATIC_REQUIRE(std::same_as<decltype(view)::domain_type, domain::no_quantization<float>>);
     REQUIRE(view.data() == values.data());
     REQUIRE(view.shape() == values.shape());
-    REQUIRE(view[1, 0] == 3);
+    REQUIRE(view[1, 0] == 3.0F);
 }
 
 TEST_CASE("tensor view constructs from compatible tensor-like sources", "[tensor_view]") {
@@ -219,19 +216,19 @@ TEST_CASE("tensor view constructs from compatible tensor-like sources", "[tensor
 }
 
 TEST_CASE("tensor view accepts standard contiguous containers", "[tensor_view]") {
-    std::vector<std::int16_t> values = {1, 2, 3, 4};
-    tensor_view view(values, tensor_shape{2, 2}, domain::no_quantization<std::int16_t>{});
+    std::vector<float> values = {1.0F, 2.0F, 3.0F, 4.0F};
+    tensor_view view(values, tensor_shape{2, 2}, domain::no_quantization<float>{});
 
     REQUIRE(view.data() == values.data());
     REQUIRE(view.shape() == tensor_shape{2, 2});
-    REQUIRE(view[1, 1] == 4);
+    REQUIRE(view[1, 1] == 4.0F);
 }
 
 TEST_CASE("tensor view rejects ranges smaller than the requested shape", "[tensor_view]") {
-    std::array<std::int16_t, 3> values = {1, 2, 3};
+    std::array<float, 3> values = {1.0F, 2.0F, 3.0F};
 
     REQUIRE_THROWS_MATCHES(
-        tensor_view(values, tensor_shape{2, 2}, domain::no_quantization<std::int16_t>{}),
+        tensor_view(values, tensor_shape{2, 2}, domain::no_quantization<float>{}),
         std::invalid_argument,
         Catch::Matchers::Message(
             "tensor_view source range is smaller than the logical tensor shape"));
@@ -239,7 +236,7 @@ TEST_CASE("tensor view rejects ranges smaller than the requested shape", "[tenso
 
 TEST_CASE("tensor view rejects tensor-like sources smaller than the requested shape",
           "[tensor_view]") {
-    std::array<std::int16_t, 3> values = {1, 2, 3};
+    std::array<float, 3> values = {1.0F, 2.0F, 3.0F};
     broken_tensor_like source{
         .storage = values.data(),
         .logical_size = values.size(),

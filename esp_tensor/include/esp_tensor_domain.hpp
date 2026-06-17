@@ -8,9 +8,6 @@
 
 namespace esp::tensor::domain {
 
-template <class T>
-concept arithmetic_scalar = std::signed_integral<T> || std::floating_point<T>;
-
 /**
  * @brief Marker type for tensors that do not use quantization metadata.
  *
@@ -18,7 +15,7 @@ concept arithmetic_scalar = std::signed_integral<T> || std::floating_point<T>;
  * intended numerical domain directly.
  *
  */
-template <arithmetic_scalar T = float> struct no_quantization {
+template <std::floating_point T = float> struct no_quantization {
     /** @brief Scalar type stored by tensors in this domain. */
     using value_type = T;
 };

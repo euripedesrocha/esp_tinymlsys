@@ -30,15 +30,14 @@ concept add_invocable = requires(Lhs&& lhs, Rhs&& rhs, Out&& out) {
 
 TEST_CASE("no quantization add concepts dispatch only to no quantization domains", "[ops]") {
     STATIC_REQUIRE(detail::no_quantization_domain<domain::no_quantization<float>>);
-    STATIC_REQUIRE(detail::no_quantization_domain<domain::no_quantization<std::int16_t>>);
     STATIC_REQUIRE_FALSE(detail::no_quantization_domain<custom_domain>);
     STATIC_REQUIRE_FALSE(detail::no_quantization_domain<other_domain<std::int16_t>>);
 }
 
 TEST_CASE("no quantization add uses the reference arithmetic path", "[ops]") {
-    auto lhs = std::to_array<std::int8_t>({12, -12, 5});
-    auto rhs = std::to_array<std::int8_t>({20, -20, -8});
-    auto out = std::to_array<std::int8_t>({0, 0, 0});
+    auto lhs = std::to_array<float>({12.0F, -12.0F, 5.0F});
+    auto rhs = std::to_array<float>({20.0F, -20.0F, -8.0F});
+    auto out = std::to_array<float>({0.0F, 0.0F, 0.0F});
     const auto shape = tensor_shape{3};
 
     auto lhs_view = tensor_view(lhs, shape);
@@ -46,9 +45,9 @@ TEST_CASE("no quantization add uses the reference arithmetic path", "[ops]") {
     auto out_view = tensor_view(out, shape);
     add(lhs_view, rhs_view, out_view);
 
-    REQUIRE(out[0] == 32);
-    REQUIRE(out[1] == -32);
-    REQUIRE(out[2] == -3);
+    REQUIRE(out[0] == 32.0F);
+    REQUIRE(out[1] == -32.0F);
+    REQUIRE(out[2] == -3.0F);
 }
 
 TEST_CASE("no quantization add supports floating point tensors", "[ops]") {
@@ -67,17 +66,17 @@ TEST_CASE("no quantization add supports floating point tensors", "[ops]") {
 }
 
 TEST_CASE("add accepts view operands and rejects owning tensors", "[ops]") {
-    auto out = std::to_array<std::int8_t>({0});
+    auto out = std::to_array<float>({0.0F});
     const auto shape = tensor_shape{1};
     using view_type = decltype(tensor_view(out, shape));
     using const_view_type = decltype(tensor_view(std::as_const(out), shape));
-    using owner_type = tensor<domain::no_quantization<std::int8_t>, tensor_shape<1>>;
+    using owner_type = tensor<domain::no_quantization<float>, tensor_shape<1>>;
 
     STATIC_REQUIRE(tensor_view_like<view_type>);
     STATIC_REQUIRE(tensor_view_like<const_view_type>);
-    STATIC_REQUIRE(std::convertible_to<decltype(std::declval<view_type&>().data()), std::int8_t*>);
+    STATIC_REQUIRE(std::convertible_to<decltype(std::declval<view_type&>().data()), float*>);
     STATIC_REQUIRE(
-        std::convertible_to<decltype(std::declval<const_view_type&>().data()), const std::int8_t*>);
+        std::convertible_to<decltype(std::declval<const_view_type&>().data()), const float*>);
     STATIC_REQUIRE_FALSE(tensor_view_like<owner_type>);
     STATIC_REQUIRE(add_invocable<view_type&, view_type&, view_type&>);
     STATIC_REQUIRE(add_invocable<view_type, view_type&, view_type&>);
@@ -88,9 +87,9 @@ TEST_CASE("add accepts view operands and rejects owning tensors", "[ops]") {
 }
 
 TEST_CASE("add accepts const-backed input views", "[ops]") {
-    constexpr auto lhs = std::to_array<std::int8_t>({12, -12, 5});
-    constexpr auto rhs = std::to_array<std::int8_t>({20, -20, -8});
-    auto out = std::to_array<std::int8_t>({0, 0, 0});
+    constexpr auto lhs = std::to_array<float>({12.0F, -12.0F, 5.0F});
+    constexpr auto rhs = std::to_array<float>({20.0F, -20.0F, -8.0F});
+    auto out = std::to_array<float>({0.0F, 0.0F, 0.0F});
     const auto shape = tensor_shape{3};
 
     auto lhs_view = tensor_view(lhs, shape);
@@ -98,33 +97,33 @@ TEST_CASE("add accepts const-backed input views", "[ops]") {
     auto out_view = tensor_view(out, shape);
     add(lhs_view, rhs_view, out_view);
 
-    REQUIRE(out[0] == 32);
-    REQUIRE(out[1] == -32);
-    REQUIRE(out[2] == -3);
+    REQUIRE(out[0] == 32.0F);
+    REQUIRE(out[1] == -32.0F);
+    REQUIRE(out[2] == -3.0F);
 }
 
 TEST_CASE("add combines constexpr array views with owning tensor views", "[ops]") {
-    constexpr auto lhs = std::to_array<std::int8_t>({12, -12, 5});
-    tensor rhs(tensor_shape{3}, domain::no_quantization<std::int8_t>{});
-    tensor out(tensor_shape{3}, domain::no_quantization<std::int8_t>{});
-    rhs.data()[0] = 20;
-    rhs.data()[1] = -20;
-    rhs.data()[2] = -8;
+    constexpr auto lhs = std::to_array<float>({12.0F, -12.0F, 5.0F});
+    tensor rhs(tensor_shape{3}, domain::no_quantization<float>{});
+    tensor out(tensor_shape{3}, domain::no_quantization<float>{});
+    rhs.data()[0] = 20.0F;
+    rhs.data()[1] = -20.0F;
+    rhs.data()[2] = -8.0F;
 
     auto lhs_view = tensor_view(lhs, tensor_shape{3});
     auto rhs_view = tensor_view(rhs);
     auto out_view = tensor_view(out);
     add(lhs_view, rhs_view, out_view);
 
-    REQUIRE(out.data()[0] == 32);
-    REQUIRE(out.data()[1] == -32);
-    REQUIRE(out.data()[2] == -3);
+    REQUIRE(out.data()[0] == 32.0F);
+    REQUIRE(out.data()[1] == -32.0F);
+    REQUIRE(out.data()[2] == -3.0F);
 }
 
 TEST_CASE("no quantization add validates matching runtime input shapes", "[ops]") {
-    auto lhs = std::to_array<std::int16_t>({1, 2});
-    auto rhs = std::to_array<std::int16_t>({3, 4, 5});
-    auto out = std::to_array<std::int16_t>({0, 0});
+    auto lhs = std::to_array<float>({1.0F, 2.0F});
+    auto rhs = std::to_array<float>({3.0F, 4.0F, 5.0F});
+    auto out = std::to_array<float>({0.0F, 0.0F});
 
     auto lhs_view = tensor_view(lhs, tensor_shape{2});
     auto rhs_view = tensor_view(rhs, tensor_shape{3});
@@ -134,9 +133,9 @@ TEST_CASE("no quantization add validates matching runtime input shapes", "[ops]"
 }
 
 TEST_CASE("no quantization add validates the output runtime shape", "[ops]") {
-    auto lhs = std::to_array<std::int16_t>({1, 2});
-    auto rhs = std::to_array<std::int16_t>({3, 4});
-    auto out = std::to_array<std::int16_t>({0, 0, 0});
+    auto lhs = std::to_array<float>({1.0F, 2.0F});
+    auto rhs = std::to_array<float>({3.0F, 4.0F});
+    auto out = std::to_array<float>({0.0F, 0.0F, 0.0F});
 
     auto lhs_view = tensor_view(lhs, tensor_shape{2});
     auto rhs_view = tensor_view(rhs, tensor_shape{2});
