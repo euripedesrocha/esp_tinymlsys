@@ -1,10 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 
 #include <array>
 #include <cstdint>
-#include <limits>
-#include <string>
 
 #include "esp_tensor_ops_affine.hpp"
 #include "esp_tensor_view.hpp"
@@ -103,57 +100,6 @@ TEST_CASE("affine add with matching scales applies zero points", "[affine]") {
 
     REQUIRE(out[0] == 21);
     REQUIRE(out[1] == -11);
-}
-
-TEST_CASE("affine add rejects non positive input scales", "[affine]") {
-    auto lhs = std::to_array<std::int8_t>({1, 2});
-    auto rhs = std::to_array<std::int8_t>({3, 4});
-    auto out = std::to_array<std::int8_t>({0, 0});
-    const auto shape = tensor_shape{2};
-
-    const auto make_input_view = [&](const auto& data, domain::affine<> domain) {
-        return tensor_view(data, shape, domain);
-    };
-    const auto make_output_view = [&](domain::affine<> domain) {
-        return tensor_view(out, shape, domain);
-    };
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(make_input_view(lhs, domain::affine<>{.scale = 0.0F}),
-                   make_input_view(rhs, domain::affine<>{.scale = 1.0F}),
-                   make_output_view(domain::affine<>{.scale = 1.0F})),
-        std::invalid_argument,
-        Catch::Matchers::Message("affine input scale must be finite and positive"));
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(make_input_view(lhs, domain::affine<>{.scale = -1.0F}),
-                   make_input_view(rhs, domain::affine<>{.scale = 1.0F}),
-                   make_output_view(domain::affine<>{.scale = 1.0F})),
-        std::invalid_argument,
-        Catch::Matchers::Message("affine input scale must be finite and positive"));
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(make_input_view(lhs, domain::affine<>{.scale = 1.0F}),
-                   make_input_view(rhs, domain::affine<>{.scale = 1.0F}),
-                   make_output_view(domain::affine<>{.scale = 0.0F})),
-        std::invalid_argument,
-        Catch::Matchers::Message("affine output scale must be finite and positive"));
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(
-            make_input_view(lhs, domain::affine<>{.scale = std::numeric_limits<float>::infinity()}),
-            make_input_view(rhs, domain::affine<>{.scale = 1.0F}),
-            make_output_view(domain::affine<>{.scale = 1.0F})),
-        std::invalid_argument,
-        Catch::Matchers::Message("affine input scale must be finite and positive"));
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(make_input_view(lhs, domain::affine<>{.scale = 1.0F}),
-                   make_input_view(
-                       rhs, domain::affine<>{.scale = std::numeric_limits<float>::quiet_NaN()}),
-                   make_output_view(domain::affine<>{.scale = 1.0F})),
-        std::invalid_argument,
-        Catch::Matchers::Message("affine input scale must be finite and positive"));
 }
 
 TEST_CASE("esp-nn add plan support rejects left shifts outside int32 range", "[affine]") {

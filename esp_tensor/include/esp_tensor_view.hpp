@@ -8,7 +8,6 @@
 
 #include "esp_tensor_concepts.hpp"
 #include "esp_tensor_domain.hpp"
-#include "esp_tensor_invariant.hpp"
 #include "esp_tensor_shape.hpp"
 
 namespace esp::tensor {
@@ -174,12 +173,8 @@ public:
 
 private:
     constexpr tensor_view(element_type* data, size_type available_size, const shape_type& shape,
-                          Domain domain)
-        : view_v(data, detail::make_extents(shape)), shape_v(shape), domain_v(domain) {
-        detail::validate_invariant(
-            available_size >= detail::logical_element_count(shape_v),
-            "tensor_view source range is smaller than the logical tensor shape");
-    }
+                          Domain domain) pre(available_size >= detail::logical_element_count(shape))
+        : view_v(data, detail::make_extents(shape)), shape_v(shape), domain_v(domain) {}
 
     [[nodiscard]] constexpr auto view(this auto& self) {
         using view_element_type =

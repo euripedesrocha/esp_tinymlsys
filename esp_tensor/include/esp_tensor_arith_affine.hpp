@@ -10,7 +10,6 @@
 
 #include "esp_tensor_domain_concepts.hpp"
 #include "esp_tensor_hal.hpp"
-#include "esp_tensor_invariant.hpp"
 #include "esp_tensor_numeric.hpp"
 
 #include "esp_nn.h"
@@ -27,18 +26,6 @@ namespace esp::tensor::detail {
 [[nodiscard]] constexpr std::int32_t centered_affine_value(supported_integer auto value,
                                                            std::int32_t zero_point) {
     return static_cast<std::int32_t>(value) - zero_point;
-}
-
-inline void validate_affine_scales(const affine_domain auto& input_domain,
-                                   const affine_domain auto& output_domain) {
-    esp::tensor::detail::validate_invariant(
-        std::isfinite(static_cast<double>(input_domain.scale)) &&
-            static_cast<double>(input_domain.scale) > 0,
-        "affine input scale must be finite and positive");
-    esp::tensor::detail::validate_invariant(
-        std::isfinite(static_cast<double>(output_domain.scale)) &&
-            static_cast<double>(output_domain.scale) > 0,
-        "affine output scale must be finite and positive");
 }
 
 /**
@@ -70,8 +57,11 @@ struct quantized_multiplier {
 }
 
 [[nodiscard]] inline quantized_multiplier scale_ratio(const affine_domain auto& input_domain,
-                                                      const affine_domain auto& output_domain) {
-    validate_affine_scales(input_domain, output_domain);
+                                                      const affine_domain auto& output_domain)
+    pre(std::isfinite(static_cast<double>(input_domain.scale)) &&
+        static_cast<double>(input_domain.scale) > 0)
+        pre(std::isfinite(static_cast<double>(output_domain.scale)) &&
+            static_cast<double>(output_domain.scale) > 0) {
     return make_quantized_multiplier(static_cast<double>(input_domain.scale) /
                                      static_cast<double>(output_domain.scale));
 }
@@ -234,8 +224,7 @@ struct add_plan {
 inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
                 affine_tensor_view auto out) {
     const auto plan = plan_add(lhs.domain(), rhs.domain(), out.domain());
-    validate_invariant(add_plan_is_supported(plan),
-                       "esp-nn affine add requires a supported quantization plan");
+    contract_assert(add_plan_is_supported(plan));
     const int shift = add_left_shift(plan);
     ::esp_nn_add_elementwise_s8(
         lhs.data(), rhs.data(), input_offset(plan.lhs_zero_point),
@@ -259,8 +248,9 @@ namespace esp::tensor {
  * and executes the quantized add kernel after the facade has validated shared
  * preconditions.
  *
- * @throws std::invalid_argument When quantization scales are not finite or
- * positive, or when an accelerated affine plan is not supported by the backend.
+ * Contract preconditions require finite positive quantization scales. The
+ * accelerated backend also asserts that the prepared quantization plan is
+ * supported by ESP-NN.
  */
 inline void add_impl(const detail::affine_tensor_view auto lhs,
                      const detail::affine_tensor_view auto rhs,

@@ -1,5 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 
 #include <array>
 #include <cstdint>
@@ -131,29 +130,4 @@ TEST_CASE("add combines constexpr array views with owning tensor views", "[ops]"
     REQUIRE(out.data()[0] == 32.0F);
     REQUIRE(out.data()[1] == -32.0F);
     REQUIRE(out.data()[2] == -3.0F);
-}
-
-TEST_CASE("no quantization add validates matching runtime input shapes", "[ops]") {
-    auto lhs = std::to_array<float>({1.0F, 2.0F});
-    auto rhs = std::to_array<float>({3.0F, 4.0F, 5.0F});
-    auto out = std::to_array<float>({0.0F, 0.0F});
-
-    auto lhs_view = tensor_view(lhs, tensor_shape{2});
-    auto rhs_view = tensor_view(rhs, tensor_shape{3});
-    auto out_view = tensor_view(out, tensor_shape{2});
-    REQUIRE_THROWS_MATCHES(arith::add(lhs_view, rhs_view, out_view), std::invalid_argument,
-                           Catch::Matchers::Message("tensor add requires matching input shapes"));
-}
-
-TEST_CASE("no quantization add validates the output runtime shape", "[ops]") {
-    auto lhs = std::to_array<float>({1.0F, 2.0F});
-    auto rhs = std::to_array<float>({3.0F, 4.0F});
-    auto out = std::to_array<float>({0.0F, 0.0F, 0.0F});
-
-    auto lhs_view = tensor_view(lhs, tensor_shape{2});
-    auto rhs_view = tensor_view(rhs, tensor_shape{2});
-    auto out_view = tensor_view(out, tensor_shape{3});
-    REQUIRE_THROWS_MATCHES(
-        arith::add(lhs_view, rhs_view, out_view), std::invalid_argument,
-        Catch::Matchers::Message("tensor add requires output shape to match inputs"));
 }

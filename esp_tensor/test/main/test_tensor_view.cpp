@@ -1,12 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 
 #include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -21,20 +19,6 @@ namespace {
 struct calibration_domain {
     using value_type = std::int16_t;
     int profile = 0;
-};
-
-struct broken_tensor_like {
-    using domain_type = domain::no_quantization<float>;
-    using shape_type = tensor_shape<2>;
-    float* storage = nullptr;
-    std::size_t logical_size = 0;
-    shape_type logical_shape;
-    domain_type logical_domain{};
-
-    domain_type::value_type* data() const { return storage; }
-    const shape_type& shape() const { return logical_shape; }
-    const domain_type& domain() const { return logical_domain; }
-    std::size_t size() const { return logical_size; }
 };
 
 struct calibrated_tensor_like {
@@ -222,32 +206,6 @@ TEST_CASE("tensor view accepts standard contiguous containers", "[tensor_view]")
     REQUIRE(view.data() == values.data());
     REQUIRE(view.shape() == tensor_shape{2, 2});
     REQUIRE(view[1, 1] == 4.0F);
-}
-
-TEST_CASE("tensor view rejects ranges smaller than the requested shape", "[tensor_view]") {
-    std::array<float, 3> values = {1.0F, 2.0F, 3.0F};
-
-    REQUIRE_THROWS_MATCHES(
-        tensor_view(values, tensor_shape{2, 2}, domain::no_quantization<float>{}),
-        std::invalid_argument,
-        Catch::Matchers::Message(
-            "tensor_view source range is smaller than the logical tensor shape"));
-}
-
-TEST_CASE("tensor view rejects tensor-like sources smaller than the requested shape",
-          "[tensor_view]") {
-    std::array<float, 3> values = {1.0F, 2.0F, 3.0F};
-    broken_tensor_like source{
-        .storage = values.data(),
-        .logical_size = values.size(),
-        .logical_shape = tensor_shape{2, 2},
-        .logical_domain = {},
-    };
-
-    REQUIRE_THROWS_MATCHES(
-        tensor_view(source), std::invalid_argument,
-        Catch::Matchers::Message(
-            "tensor_view source range is smaller than the logical tensor shape"));
 }
 
 TEST_CASE("tensor view default constructs to empty", "[tensor_view]") {

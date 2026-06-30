@@ -13,13 +13,9 @@ inline void dot_impl(const detail::no_quantized_tensor_view auto lhs,
                      const detail::no_quantized_tensor_view auto rhs,
                      detail::no_quantized_tensor_view auto out)
     requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)>
-{
+pre(lhs.shape() == rhs.shape()) pre(out.size() == 1) {
     using input_value_type = typename decltype(lhs)::domain_type::value_type;
     using output_value_type = typename decltype(out)::domain_type::value_type;
-
-    detail::validate_invariant(lhs.shape() == rhs.shape(),
-                               "tensor dot requires matching input shapes");
-    detail::validate_invariant(out.size() == 1, "tensor dot output must contain one value");
 
     if constexpr (std::same_as<input_value_type, float> && std::same_as<output_value_type, float>) {
         if constexpr (hal::active_target() == hal::target::esp32s3 ||

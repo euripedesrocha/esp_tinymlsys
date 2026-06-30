@@ -11,7 +11,6 @@
 #include "dsps_dotprod.h"
 #include "esp_tensor_domain_concepts.hpp"
 #include "esp_tensor_hal.hpp"
-#include "esp_tensor_invariant.hpp"
 #include "esp_tensor_quantization_fixed_point.hpp"
 
 namespace esp::tensor::detail {
@@ -70,23 +69,18 @@ consteval std::size_t max_dot_batch_elements_for() {
     return max_elements / batch_size * batch_size;
 }
 
-inline std::int32_t raw_dot_s8(const std::int8_t* lhs, const std::int8_t* rhs, std::size_t size) {
-    detail::validate_invariant(hal::is_aligned(lhs, hal::esp32s3::simd_alignment),
-                               "esp32s3 fixed-point dot requires aligned lhs storage");
-    detail::validate_invariant(hal::is_aligned(rhs, hal::esp32s3::simd_alignment),
-                               "esp32s3 fixed-point dot requires aligned rhs storage");
+inline std::int32_t raw_dot_s8(const std::int8_t* lhs, const std::int8_t* rhs, std::size_t size)
+    pre(hal::is_aligned(lhs, hal::esp32s3::simd_alignment))
+        pre(hal::is_aligned(rhs, hal::esp32s3::simd_alignment)) {
 
     auto result = std::int32_t{};
     dsps_dp_s8(lhs, rhs, &result, static_cast<int>(size));
     return result;
 }
 
-inline std::int64_t raw_dot_s16(const std::int16_t* lhs, const std::int16_t* rhs,
-                                std::size_t size) {
-    detail::validate_invariant(hal::is_aligned(lhs, hal::esp32s3::simd_alignment),
-                               "esp32s3 fixed-point dot requires aligned lhs storage");
-    detail::validate_invariant(hal::is_aligned(rhs, hal::esp32s3::simd_alignment),
-                               "esp32s3 fixed-point dot requires aligned rhs storage");
+inline std::int64_t raw_dot_s16(const std::int16_t* lhs, const std::int16_t* rhs, std::size_t size)
+    pre(hal::is_aligned(lhs, hal::esp32s3::simd_alignment))
+        pre(hal::is_aligned(rhs, hal::esp32s3::simd_alignment)) {
 
     return esp_tensor_dot_s16_raw_esp32s3(lhs, rhs, static_cast<int>(size));
 }
@@ -135,13 +129,9 @@ inline void dot_impl(const detail::fixed_point_tensor_view auto lhs,
                      const detail::fixed_point_tensor_view auto rhs,
                      detail::fixed_point_tensor_view auto out)
     requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)>
-{
+pre(lhs.shape() == rhs.shape()) pre(out.size() == 1) {
     using value_type = typename std::remove_cvref_t<decltype(lhs)>::value_type;
     using out_value_type = typename std::remove_cvref_t<decltype(out)>::value_type;
-
-    detail::validate_invariant(lhs.shape() == rhs.shape(),
-                               "tensor dot requires matching input shapes");
-    detail::validate_invariant(out.size() == 1, "tensor dot output must contain one value");
 
     auto result = int64_t{};
 

@@ -11,7 +11,6 @@
 #include "dsps_add.h"
 #include "esp_tensor_domain_concepts.hpp"
 #include "esp_tensor_hal.hpp"
-#include "esp_tensor_invariant.hpp"
 #include "esp_tensor_numeric.hpp"
 
 namespace esp::tensor::detail {
@@ -28,12 +27,9 @@ inline void add(const fixed_point_tensor_view auto lhs, const fixed_point_tensor
     std::size_t processed = 0;
 
     if constexpr (accelerated_fixed_point<value_type>) {
-        detail::validate_invariant(hal::is_aligned(lhs.data(), hal::esp32s3::simd_alignment),
-                                   "esp32s3 fixed-point add requires aligned lhs storage");
-        detail::validate_invariant(hal::is_aligned(rhs.data(), hal::esp32s3::simd_alignment),
-                                   "esp32s3 fixed-point add requires aligned rhs storage");
-        detail::validate_invariant(hal::is_aligned(out.data(), hal::esp32s3::simd_alignment),
-                                   "esp32s3 fixed-point add requires aligned output storage");
+        contract_assert(hal::is_aligned(lhs.data(), hal::esp32s3::simd_alignment));
+        contract_assert(hal::is_aligned(rhs.data(), hal::esp32s3::simd_alignment));
+        contract_assert(hal::is_aligned(out.data(), hal::esp32s3::simd_alignment));
 
         constexpr std::size_t simd_width = 16 / sizeof(value_type);
         processed = static_cast<std::size_t>(out.size() / simd_width * simd_width);

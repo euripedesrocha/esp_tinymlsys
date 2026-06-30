@@ -1,5 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <array>
@@ -13,7 +12,6 @@
 #include "esp_tensor_view.hpp"
 
 using namespace esp::tensor;
-using Catch::Matchers::Message;
 using Catch::Matchers::WithinAbs;
 
 namespace {
@@ -107,17 +105,6 @@ TEST_CASE("requantize uses the source fixed point fractional width", "[requantiz
     REQUIRE(output[2] == -0.5F);
     REQUIRE_THAT(output[3], WithinAbs(127.0F / 128.0F, 0.000001F));
     REQUIRE(output[4] == -1.0F);
-}
-
-TEST_CASE("requantize validates matching logical shapes", "[requantize]") {
-    auto input = std::to_array<std::int16_t>({0, 16384});
-    auto output = std::to_array<float>({0.0F, 0.0F});
-
-    auto input_view = tensor_view(input, tensor_shape{1}, domain::fixed_point<std::int16_t>{});
-    auto output_view = tensor_view(output, tensor_shape{2}, domain::no_quantization<float>{});
-
-    REQUIRE_THROWS_MATCHES(quantization::requantize(input_view, output_view), std::invalid_argument,
-                           Message("tensor requantize requires matching input and output shapes"));
 }
 
 TEST_CASE("requantize converts Q15 fixed point values to double", "[requantize]") {

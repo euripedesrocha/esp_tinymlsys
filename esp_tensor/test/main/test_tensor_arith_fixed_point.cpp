@@ -1,5 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 
 #include <array>
 #include <cstddef>
@@ -160,44 +159,5 @@ TEST_CASE("fixed point add uses aligned accelerated path on esp32s3", "[fixed_po
         require_equal(out, std::array<std::int16_t, 8>{9, 9, 9, 9, 9, 9, 9, 9});
     } else {
         SUCCEED("aligned accelerated path is only exercised on esp32s3");
-    }
-}
-
-TEST_CASE("fixed point add validates shape compatibility at the ops facade", "[fixed_point]") {
-    alignas(16) std::array<std::int16_t, 2> lhs = {1, 2};
-    alignas(16) std::array<std::int16_t, 3> rhs = {3, 4, 5};
-    alignas(16) std::array<std::int16_t, 2> out = {0, 0};
-
-    REQUIRE_THROWS_MATCHES(
-        arith::add(tensor_view(lhs, tensor_shape{2}, domain::fixed_point<std::int16_t>{}),
-                   tensor_view(rhs, tensor_shape{3}, domain::fixed_point<std::int16_t>{}),
-                   tensor_view(out, tensor_shape{2}, domain::fixed_point<std::int16_t>{})),
-        std::invalid_argument,
-        Catch::Matchers::Message("tensor add requires matching input shapes"));
-}
-
-TEST_CASE("fixed point add requires aligned buffers on accelerated targets", "[fixed_point]") {
-    if constexpr (hal::active_target() == hal::target::esp32s3) {
-        constexpr std::size_t element_count = 8;
-        std::array<std::byte, (sizeof(std::int16_t) * element_count) + 1> lhs_storage = {};
-        std::array<std::byte, (sizeof(std::int16_t) * element_count) + 1> rhs_storage = {};
-        std::array<std::byte, (sizeof(std::int16_t) * element_count) + 1> out_storage = {};
-
-        auto* lhs = reinterpret_cast<std::int16_t*>(lhs_storage.data() + 1);
-        auto* rhs = reinterpret_cast<std::int16_t*>(rhs_storage.data() + 1);
-        auto* out = reinterpret_cast<std::int16_t*>(out_storage.data() + 1);
-
-        REQUIRE_THROWS_MATCHES(
-            arith::add(
-                tensor_view(std::span<std::int16_t>(lhs, element_count),
-                            tensor_shape{element_count}, domain::fixed_point<std::int16_t>{}),
-                tensor_view(std::span<std::int16_t>(rhs, element_count),
-                            tensor_shape{element_count}, domain::fixed_point<std::int16_t>{}),
-                tensor_view(std::span<std::int16_t>(out, element_count),
-                            tensor_shape{element_count}, domain::fixed_point<std::int16_t>{})),
-            std::invalid_argument,
-            Catch::Matchers::Message("esp32s3 fixed-point add requires aligned lhs storage"));
-    } else {
-        SUCCEED("aligned-buffer validation is only required on accelerated targets");
     }
 }

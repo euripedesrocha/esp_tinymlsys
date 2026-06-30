@@ -1,5 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <array>
@@ -215,30 +214,4 @@ TEST_CASE("dot produces zero for empty inputs", "[dot]") {
     linear_algebra::dot(lhs_view, rhs_view, out_view);
 
     REQUIRE(out[0] == 0.0F);
-}
-
-TEST_CASE("dot validates the output contains exactly one element", "[dot]") {
-    auto lhs = std::to_array<float>({1.0F, 2.0F});
-    auto rhs = std::to_array<float>({3.0F, 4.0F});
-    auto out = std::to_array<float>({0.0F, 0.0F});
-
-    const auto lhs_view = tensor_view(lhs, tensor_shape{2}, domain::no_quantization<float>{});
-    const auto rhs_view = tensor_view(rhs, tensor_shape{2}, domain::no_quantization<float>{});
-    auto out_view = tensor_view(out, tensor_shape{2}, domain::no_quantization<float>{});
-
-    REQUIRE_THROWS_MATCHES(linear_algebra::dot(lhs_view, rhs_view, out_view), std::invalid_argument,
-                           Catch::Matchers::Message("tensor dot output must contain one value"));
-}
-
-TEST_CASE("dot validates matching input shapes", "[dot]") {
-    auto lhs = std::to_array<float>({1.0F, 2.0F});
-    auto rhs = std::to_array<float>({3.0F, 4.0F, 5.0F});
-    auto out = std::to_array<float>({0.0F});
-
-    const auto lhs_view = tensor_view(lhs, tensor_shape{2}, domain::no_quantization<float>{});
-    const auto rhs_view = tensor_view(rhs, tensor_shape{3}, domain::no_quantization<float>{});
-    auto out_view = tensor_view(out, tensor_shape{1}, domain::no_quantization<float>{});
-
-    REQUIRE_THROWS_MATCHES(linear_algebra::dot(lhs_view, rhs_view, out_view), std::invalid_argument,
-                           Catch::Matchers::Message("tensor dot requires matching input shapes"));
 }

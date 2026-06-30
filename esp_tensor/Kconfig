@@ -1,0 +1,23 @@
+menu "ESP Tensor"
+
+    choice ESP_TENSOR_CONTRACT_MODE
+        prompt "C++26 contract evaluation mode"
+        default ESP_TENSOR_CONTRACT_MODE_ENFORCE
+        help
+            Select how C++26 contract checks are evaluated when building
+            esp_tensor.
+
+    config ESP_TENSOR_CONTRACT_MODE_ENFORCE
+        bool "Enforce contracts"
+        help
+            Evaluate contract predicates and call the contract violation
+            handler when a predicate is false.
+
+    config ESP_TENSOR_CONTRACT_MODE_IGNORE
+        bool "Ignore contracts"
+        help
+            Compile contract annotations without evaluating predicates.
+
+    endchoice
+
+endmenu

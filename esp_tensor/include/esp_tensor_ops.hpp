@@ -1,7 +1,6 @@
 #pragma once
 
 #include "esp_tensor_concepts.hpp"
-#include "esp_tensor_invariant.hpp"
 #include "esp_tensor_arith.hpp"
 #include "esp_tensor_linear_algebra.hpp"
 
@@ -28,12 +27,7 @@ inline void add(const tensor_view_like auto lhs, const tensor_view_like auto rhs
     requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)> &&
              same_tensor_shape<decltype(lhs), decltype(rhs), decltype(out)> &&
              same_tensor_value_type<decltype(lhs), decltype(rhs), decltype(out)>
-{
-    detail::validate_invariant(lhs.shape() == rhs.shape(),
-                               "tensor add requires matching input shapes");
-    detail::validate_invariant(lhs.shape() == out.shape(),
-                               "tensor add requires output shape to match inputs");
-
+pre(lhs.shape() == rhs.shape()) pre(lhs.shape() == out.shape()) {
     add_impl(lhs, rhs, out);
 }
 
@@ -44,11 +38,7 @@ namespace esp::tensor::linear_algebra {
 inline void dot(const tensor_view_like auto lhs, const tensor_view_like auto rhs,
                 tensor_view_like auto out)
     requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)>
-{
-    detail::validate_invariant(lhs.shape() == rhs.shape(),
-                               "tensor dot requires matching input shapes");
-    detail::validate_invariant(out.size() == 1, "tensor dot output must contain one value");
-
+pre(lhs.shape() == rhs.shape()) pre(out.size() == 1) {
     dot_impl(lhs, rhs, out);
 }
 
@@ -58,10 +48,7 @@ namespace esp::tensor::quantization {
 
 inline void requantize(const tensor_view_like auto input, tensor_view_like auto output)
     requires same_tensor_shape<decltype(input), decltype(output)>
-{
-    detail::validate_invariant(input.shape() == output.shape(),
-                               "tensor requantize requires matching input and output shapes");
-
+pre(input.shape() == output.shape()) {
     requantize_impl(input, output);
 }
 
