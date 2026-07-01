@@ -14,6 +14,32 @@
 
 #include "esp_nn.h"
 
+namespace esp::tensor::arith {
+
+/**
+ * @brief Plan to affine add parameters reusable across tensors with the same domains.
+ */
+struct affine_add_plan {
+    std::int32_t lhs_multiplier = 0;
+    std::int32_t rhs_multiplier = 0;
+    int lhs_shift = 0;
+    int rhs_shift = 0;
+    int left_shift = 0;
+    std::int32_t lhs_zero_point = 0;
+    std::int32_t rhs_zero_point = 0;
+    std::int32_t out_zero_point = 0;
+    std::int32_t lhs_input_offset = 0;
+    std::int32_t rhs_input_offset = 0;
+    int lhs_input_shift = 0;
+    int rhs_input_shift = 0;
+    std::int32_t out_multiplier = std::numeric_limits<std::int32_t>::max();
+    int out_shift = 0;
+    std::int32_t activation_min = std::numeric_limits<std::int8_t>::lowest();
+    std::int32_t activation_max = std::numeric_limits<std::int8_t>::max();
+};
+
+} // namespace esp::tensor::arith
+
 namespace esp::tensor::detail {
 
 /**
@@ -35,6 +61,8 @@ struct quantized_multiplier {
     std::int32_t multiplier = 0;
     int shift = 0;
 };
+
+[[nodiscard]] constexpr std::int32_t input_offset(std::int32_t zero_point) { return -zero_point; }
 
 [[nodiscard]] inline quantized_multiplier make_quantized_multiplier(double scale) {
     if (scale == 0.0 || !std::isfinite(scale)) {
@@ -64,6 +92,31 @@ struct quantized_multiplier {
             static_cast<double>(output_domain.scale) > 0) {
     return make_quantized_multiplier(static_cast<double>(input_domain.scale) /
                                      static_cast<double>(output_domain.scale));
+}
+
+[[nodiscard]] inline arith::affine_add_plan make_affine_add_plan(const affine_domain auto& lhs,
+                                                                 const affine_domain auto& rhs,
+                                                                 const affine_domain auto& out) {
+    const auto lhs_multiplier = scale_ratio(lhs, out);
+    const auto rhs_multiplier = scale_ratio(rhs, out);
+    const int left_shift = std::max({0, lhs_multiplier.shift, rhs_multiplier.shift});
+    const auto lhs_zero_point = static_cast<std::int32_t>(lhs.zero_point);
+    const auto rhs_zero_point = static_cast<std::int32_t>(rhs.zero_point);
+
+    return {
+        .lhs_multiplier = lhs_multiplier.multiplier,
+        .rhs_multiplier = rhs_multiplier.multiplier,
+        .lhs_shift = lhs_multiplier.shift,
+        .rhs_shift = rhs_multiplier.shift,
+        .left_shift = left_shift,
+        .lhs_zero_point = lhs_zero_point,
+        .rhs_zero_point = rhs_zero_point,
+        .out_zero_point = static_cast<std::int32_t>(out.zero_point),
+        .lhs_input_offset = input_offset(lhs_zero_point),
+        .rhs_input_offset = input_offset(rhs_zero_point),
+        .lhs_input_shift = lhs_multiplier.shift - left_shift,
+        .rhs_input_shift = rhs_multiplier.shift - left_shift,
+    };
 }
 
 /**
@@ -150,89 +203,51 @@ requantize_shared_shift_add_input(std::int32_t value, quantized_multiplier multi
  *
  */
 inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
-                affine_tensor_view auto out) {
-    const auto& lhs_domain = lhs.domain();
-    const auto& rhs_domain = rhs.domain();
-    const auto& out_domain = out.domain();
-    const auto lhs_multiplier = scale_ratio(lhs_domain, out_domain);
-    const auto rhs_multiplier = scale_ratio(rhs_domain, out_domain);
-    const int left_shift = std::max({0, lhs_multiplier.shift, rhs_multiplier.shift});
-
+                affine_tensor_view auto out, const arith::affine_add_plan& plan) {
     std::ranges::transform(
-        lhs, rhs, out.begin(),
-        [&lhs_domain, &rhs_domain, &out_domain, lhs_multiplier, rhs_multiplier,
-         left_shift](const std::int8_t lhs_value, const std::int8_t rhs_value) {
+        lhs, rhs, out.begin(), [&plan](const std::int8_t lhs_value, const std::int8_t rhs_value) {
             const auto lhs_term = requantize_shared_shift_add_input(
-                centered_affine_value(lhs_value, static_cast<std::int32_t>(lhs_domain.zero_point)),
-                lhs_multiplier, left_shift);
+                centered_affine_value(lhs_value, plan.lhs_zero_point),
+                {.multiplier = plan.lhs_multiplier, .shift = plan.lhs_shift}, plan.left_shift);
             const auto rhs_term = requantize_shared_shift_add_input(
-                centered_affine_value(rhs_value, static_cast<std::int32_t>(rhs_domain.zero_point)),
-                rhs_multiplier, left_shift);
+                centered_affine_value(rhs_value, plan.rhs_zero_point),
+                {.multiplier = plan.rhs_multiplier, .shift = plan.rhs_shift}, plan.left_shift);
             return std::saturating_cast<std::int8_t>(
-                lhs_term + rhs_term + static_cast<std::int32_t>(out_domain.zero_point));
+                lhs_term + rhs_term + static_cast<std::int32_t>(plan.out_zero_point));
         });
-}
-
-namespace esp_nn {
-
-struct add_plan {
-    quantized_multiplier lhs_multiplier;
-    quantized_multiplier rhs_multiplier;
-    std::int32_t lhs_zero_point = 0;
-    std::int32_t rhs_zero_point = 0;
-    std::int32_t out_zero_point = 0;
-};
-
-[[nodiscard]] inline add_plan plan_add(const auto& lhs, const auto& rhs, const auto& out)
-    requires requires {
-        lhs.scale;
-        lhs.zero_point;
-        rhs.scale;
-        rhs.zero_point;
-        out.scale;
-        out.zero_point;
-    }
-{
-    return {
-        .lhs_multiplier = scale_ratio(lhs, out),
-        .rhs_multiplier = scale_ratio(rhs, out),
-        .lhs_zero_point = static_cast<std::int32_t>(lhs.zero_point),
-        .rhs_zero_point = static_cast<std::int32_t>(rhs.zero_point),
-        .out_zero_point = static_cast<std::int32_t>(out.zero_point),
-    };
-}
-
-[[nodiscard]] constexpr int add_left_shift(const add_plan& plan) {
-    return std::max({0, plan.lhs_multiplier.shift, plan.rhs_multiplier.shift});
-}
-
-[[nodiscard]] constexpr bool zero_point_offset_fits_s8(std::int32_t zero_point) {
-    constexpr std::int32_t lowest_offset = -128;
-    constexpr std::int32_t max_offset = 127;
-    return zero_point >= -max_offset && zero_point <= -lowest_offset;
-}
-
-[[nodiscard]] constexpr std::int32_t input_offset(std::int32_t zero_point) { return -zero_point; }
-
-[[nodiscard]] constexpr bool add_plan_is_supported(const add_plan& plan) {
-    const int shift = add_left_shift(plan);
-    return shift < 31 && zero_point_offset_fits_s8(plan.lhs_zero_point) &&
-           zero_point_offset_fits_s8(plan.rhs_zero_point) &&
-           plan.lhs_multiplier.shift - shift <= 0 && plan.rhs_multiplier.shift - shift <= 0;
 }
 
 inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
                 affine_tensor_view auto out) {
-    const auto plan = plan_add(lhs.domain(), rhs.domain(), out.domain());
-    contract_assert(add_plan_is_supported(plan));
-    const int shift = add_left_shift(plan);
+    add(lhs, rhs, out, make_affine_add_plan(lhs.domain(), rhs.domain(), out.domain()));
+}
+
+namespace esp_nn {
+
+[[nodiscard]] constexpr bool input_offset_fits_s8(std::int32_t input_offset) {
+    return input_offset >= std::numeric_limits<std::int8_t>::lowest() &&
+           input_offset <= std::numeric_limits<std::int8_t>::max();
+}
+
+[[nodiscard]] constexpr bool add_plan_is_supported(const arith::affine_add_plan& plan) {
+    return plan.left_shift < 31 && input_offset_fits_s8(plan.lhs_input_offset) &&
+           input_offset_fits_s8(plan.rhs_input_offset) && plan.lhs_input_shift <= 0 &&
+           plan.rhs_input_shift <= 0 && plan.out_shift <= 0;
+}
+
+inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
+                affine_tensor_view auto out, const arith::affine_add_plan& plan)
+    pre(add_plan_is_supported(plan)) {
     ::esp_nn_add_elementwise_s8(
-        lhs.data(), rhs.data(), input_offset(plan.lhs_zero_point),
-        input_offset(plan.rhs_zero_point), plan.lhs_multiplier.multiplier,
-        plan.rhs_multiplier.multiplier, plan.lhs_multiplier.shift - shift,
-        plan.rhs_multiplier.shift - shift, shift, out.data(), plan.out_zero_point,
-        std::numeric_limits<std::int32_t>::max(), 0, std::numeric_limits<std::int8_t>::lowest(),
-        std::numeric_limits<std::int8_t>::max(), static_cast<std::int32_t>(out.size()));
+        lhs.data(), rhs.data(), plan.lhs_input_offset, plan.rhs_input_offset, plan.lhs_multiplier,
+        plan.rhs_multiplier, plan.lhs_input_shift, plan.rhs_input_shift, plan.left_shift,
+        out.data(), plan.out_zero_point, plan.out_multiplier, plan.out_shift, plan.activation_min,
+        plan.activation_max, static_cast<std::int32_t>(out.size()));
+}
+
+inline void add(const affine_tensor_view auto lhs, const affine_tensor_view auto rhs,
+                affine_tensor_view auto out) {
+    add(lhs, rhs, out, make_affine_add_plan(lhs.domain(), rhs.domain(), out.domain()));
 }
 
 } // namespace esp_nn
@@ -253,15 +268,41 @@ namespace esp::tensor {
  * supported by ESP-NN.
  */
 inline void add_impl(const detail::affine_tensor_view auto lhs,
-                     const detail::affine_tensor_view auto rhs,
-                     detail::affine_tensor_view auto out) {
+                     const detail::affine_tensor_view auto rhs, detail::affine_tensor_view auto out,
+                     const arith::affine_add_plan& plan) {
     if constexpr (hal::active_target() == hal::target::esp32s3 ||
                   hal::active_target() == hal::target::esp32p4) {
-        detail::esp_nn::add(lhs, rhs, out);
+        detail::esp_nn::add(lhs, rhs, out, plan);
         return;
     }
 
-    detail::add(lhs, rhs, out);
+    detail::add(lhs, rhs, out, plan);
+}
+
+inline void add_impl(const detail::affine_tensor_view auto lhs,
+                     const detail::affine_tensor_view auto rhs,
+                     detail::affine_tensor_view auto out) {
+    add_impl(lhs, rhs, out, detail::make_affine_add_plan(lhs.domain(), rhs.domain(), out.domain()));
 }
 
 } // namespace esp::tensor
+
+namespace esp::tensor::arith {
+
+[[nodiscard]] inline affine_add_plan plan_add(const detail::affine_domain auto& lhs,
+                                              const detail::affine_domain auto& rhs,
+                                              const detail::affine_domain auto& out) {
+    return detail::make_affine_add_plan(lhs, rhs, out);
+}
+
+inline void add(const detail::affine_tensor_view auto lhs,
+                const detail::affine_tensor_view auto rhs, detail::affine_tensor_view auto out,
+                const affine_add_plan& plan)
+    requires same_tensor_domain<decltype(lhs), decltype(rhs), decltype(out)> &&
+             same_tensor_shape<decltype(lhs), decltype(rhs), decltype(out)> &&
+             same_tensor_value_type<decltype(lhs), decltype(rhs), decltype(out)>
+pre(lhs.shape() == rhs.shape()) pre(lhs.shape() == out.shape()) {
+    add_impl(lhs, rhs, out, plan);
+}
+
+} // namespace esp::tensor::arith

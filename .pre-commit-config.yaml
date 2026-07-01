@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: clang-format
         name: clang-format
-        entry: clang-format -i
+        entry: clang-format -style=file -i
         language: system
         files: \.(c|cc|cpp|cxx|h|hh|hpp|hxx)$
 
