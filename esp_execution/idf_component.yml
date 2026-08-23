@@ -1,0 +1,18 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+description: A pedagogical C++26 sender/receiver core for ESP-IDF
+examples:
+  - path: examples/basic
+files:
+  use_gitignore: true
+license: Apache-2.0
+repository: https://github.com/euripedesrocha/esp_tinymlsys.git
+tags:
+  - esp-idf
+  - execution
+  - senders
+  - receivers
+  - cxx26
+url: https://github.com/euripedesrocha/esp_tinymlsys/tree/main/esp_execution
+version: 0.1.0

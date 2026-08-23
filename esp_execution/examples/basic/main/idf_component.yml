@@ -1,0 +1,6 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+  esp_execution:
+    version: "*"
+    override_path: ../../..

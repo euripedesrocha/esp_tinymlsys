@@ -9,10 +9,12 @@ general-purpose ML runtime too early.
 
 ```text
 esp_tinymlsys/
+├── esp_execution/ # Portable C++26 sender/receiver teaching component
 ├── esp_memory/    # Memory resources and allocation policy experiments
 └── esp_tensor/    # Tensor views, tensor ownership, numeric domains, kernels
 ```
 
+- `esp_execution` provides a small, synchronous sender/receiver lifecycle core.
 - `esp_memory` provides allocation and resource policy primitives.
 - `esp_tensor` provides tensor storage, views, domains, arithmetic, and kernels.
 

@@ -1,0 +1,7 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+  espressif/catch2: "^3.7.0"
+  esp_execution:
+    version: "*"
+    override_path: ../../..
