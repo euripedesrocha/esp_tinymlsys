@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "test_main.cpp"
         "test_execution.cpp"
+        "test_control_flow.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE

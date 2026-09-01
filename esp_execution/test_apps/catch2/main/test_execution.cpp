@@ -247,6 +247,11 @@ struct multi_signature_callable {
     int operator()(int first, int second) const noexcept { return first + second; }
 };
 
+struct uniform_signature_callable {
+    int operator()(int value) const noexcept { return value; }
+    int operator()(int first, int second) const noexcept { return first + second; }
+};
+
 struct noninvocable_callable {};
 
 struct move_only_callable {
@@ -387,10 +392,16 @@ TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
 }
 
 TEST_CASE("then transforms every advertised value signature", "[then][signatures]") {
+    STATIC_REQUIRE_FALSE(std::same_as<then_t, upon_error_t>);
+    STATIC_REQUIRE_FALSE(std::same_as<then_t, upon_stopped_t>);
+    STATIC_REQUIRE_FALSE(std::same_as<upon_error_t, upon_stopped_t>);
+
     using value_then_sender = decltype(then(std::declval<one_sender>(), increment_callable{}));
     using void_then_sender = decltype(then(std::declval<one_sender>(), void_callable{}));
     using multi_then_sender =
         decltype(then(std::declval<multi_signature_sender>(), multi_signature_callable{}));
+    using deduplicated_then_sender =
+        decltype(then(std::declval<multi_signature_sender>(), uniform_signature_callable{}));
     using error_then_sender = decltype(then(std::declval<error_sender>(), noninvocable_callable{}));
     using stopped_then_sender =
         decltype(then(std::declval<stopped_sender>(), noninvocable_callable{}));
@@ -402,6 +413,9 @@ TEST_CASE("then transforms every advertised value signature", "[then][signatures
     STATIC_REQUIRE(std::same_as<completion_signatures_of_t<multi_then_sender>,
                                 completion_signatures<set_value_t(long), set_value_t(int),
                                                       set_error_t(int), set_stopped_t()>>);
+    STATIC_REQUIRE(
+        std::same_as<completion_signatures_of_t<deduplicated_then_sender>,
+                     completion_signatures<set_value_t(int), set_error_t(int), set_stopped_t()>>);
     STATIC_REQUIRE(std::same_as<completion_signatures_of_t<error_then_sender>,
                                 completion_signatures<set_error_t(int)>>);
     STATIC_REQUIRE(std::same_as<completion_signatures_of_t<stopped_then_sender>,

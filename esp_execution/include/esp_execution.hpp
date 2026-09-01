@@ -16,3 +16,5 @@
 #include "esp_execution/sender_adaptor.hpp"
 #include "esp_execution/just.hpp"
 #include "esp_execution/then.hpp"
+#include "esp_execution/upon_error.hpp"
+#include "esp_execution/upon_stopped.hpp"
