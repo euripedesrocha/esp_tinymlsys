@@ -3,6 +3,9 @@
 
 #include "sdkconfig.h"
 
+#include <contracts>
+#include <cstdlib>
+
 #if CONFIG_IDF_TARGET_LINUX
 
 #include <cstdlib>
@@ -15,6 +18,10 @@
 #include "esp_console.h"
 
 #endif
+
+void handle_contract_violation(const std::contracts::contract_violation& /* violation */) noexcept {
+    std::abort();
+}
 
 extern "C" void app_main(void) {
 #if CONFIG_IDF_TARGET_LINUX

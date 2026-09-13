@@ -4,8 +4,15 @@
 #include <exception>
 #include <utility>
 
+#include <contracts>
+#include <cstdlib>
+
 #include "esp_execution.hpp"
 #include "esp_log.h"
+
+void handle_contract_violation(const std::contracts::contract_violation& /* violation */) noexcept {
+    std::abort();
+}
 
 namespace {
 

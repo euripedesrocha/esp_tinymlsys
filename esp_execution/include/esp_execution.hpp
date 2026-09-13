@@ -18,3 +18,4 @@
 #include "esp_execution/then.hpp"
 #include "esp_execution/upon_error.hpp"
 #include "esp_execution/upon_stopped.hpp"
+#include "esp_execution/repeat.hpp"

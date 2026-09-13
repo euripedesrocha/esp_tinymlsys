@@ -3,6 +3,7 @@ idf_component_register(
         "test_main.cpp"
         "test_execution.cpp"
         "test_control_flow.cpp"
+        "test_repeat.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE
