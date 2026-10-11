@@ -21,6 +21,13 @@ namespace esp_execution_test {
 
 namespace execution = esp::execution;
 
+struct value_only_receiver {
+    using receiver_concept = execution::receiver_tag;
+    int* completions;
+
+    void set_value() && noexcept { ++*completions; }
+};
+
 enum class terminate_as : uint8_t {
     error,
     stopped,

@@ -246,6 +246,21 @@ struct forever_control {
 
     constexpr bool complete_after_value(auto&&...) noexcept { return false; }
 };
+
+class count_control {
+public:
+    static constexpr bool can_complete = true;
+
+    constexpr explicit count_control(std::size_t remaining) noexcept : remaining_(remaining) {}
+
+    constexpr bool complete_before_start() const noexcept { return remaining_ == 0; }
+
+    constexpr bool complete_after_value(auto&&...) noexcept { return --remaining_ == 0; }
+
+private:
+    std::size_t remaining_;
+};
+
 template <class Sender, class Control>
     requires control_for<Control, Sender>
 class sender {
@@ -460,6 +475,20 @@ struct repeat_t {
     }
 };
 
+struct repeat_n_t {
+    template <sender Sender>
+        requires detail::repeat::compatible<Sender>
+    constexpr auto operator()(Sender&& source, std::size_t count) const {
+        return detail::repeat::make_sender(std::forward<Sender>(source),
+                                           detail::repeat::count_control{count});
+    }
+
+    constexpr auto operator()(std::size_t count) const {
+        return detail::sender_adaptor_binding{std::bind_back(*this, count)};
+    }
+};
+
 inline constexpr repeat_t repeat{};
+inline constexpr repeat_n_t repeat_n{};
 
 } // namespace esp::execution
