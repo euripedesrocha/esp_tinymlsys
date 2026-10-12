@@ -99,19 +99,6 @@ concept compatible =
     count_completion_signatures_v<completion_signatures_of_t<Sender, Environment>, set_value_t> !=
         0;
 
-template <class Predicate, class Signature>
-inline constexpr bool predicate_signature_compatible_v = true;
-
-template <class Predicate, class... Arguments>
-inline constexpr bool predicate_signature_compatible_v<Predicate, set_value_t(Arguments...)> =
-    std::is_nothrow_invocable_r_v<bool, Predicate&, Arguments...>;
-
-template <class Predicate, class Signatures> inline constexpr bool predicate_compatible_v = false;
-
-template <class Predicate, class... Signatures>
-inline constexpr bool predicate_compatible_v<Predicate, completion_signatures<Signatures...>> =
-    (predicate_signature_compatible_v<Predicate, Signatures> && ...);
-
 template <class Control, class Signature> inline constexpr bool control_accepts_signature_v = true;
 
 template <class Control, class... Arguments>
@@ -259,6 +246,26 @@ public:
 
 private:
     std::size_t remaining_;
+};
+
+template <class Predicate> class predicate_control {
+public:
+    static constexpr bool can_complete = true;
+
+    constexpr explicit predicate_control(Predicate predicate) noexcept(
+        std::is_nothrow_move_constructible_v<Predicate>)
+        : predicate_(std::move(predicate)) {}
+
+    constexpr bool complete_before_start() const noexcept { return false; }
+
+    constexpr bool complete_after_value(auto&&... values) noexcept
+        requires std::is_nothrow_invocable_r_v<bool, Predicate&, decltype(values)...>
+    {
+        return std::invoke(predicate_, std::forward<decltype(values)>(values)...);
+    }
+
+private:
+    Predicate predicate_;
 };
 
 template <class Sender, class Control>
@@ -475,6 +482,25 @@ struct repeat_t {
     }
 };
 
+struct repeat_until_t {
+    template <sender Sender, detail::movable_value Predicate>
+        requires detail::repeat::compatible<Sender> &&
+                 detail::repeat::control_for<
+                     detail::repeat::predicate_control<std::decay_t<Predicate>>, Sender>
+    constexpr auto operator()(Sender&& source, Predicate&& predicate) const {
+        using predicate_type = std::decay_t<Predicate>;
+        return detail::repeat::make_sender(
+            std::forward<Sender>(source),
+            detail::repeat::predicate_control<predicate_type>{std::forward<Predicate>(predicate)});
+    }
+
+    template <detail::movable_value Predicate>
+    constexpr auto operator()(Predicate&& predicate) const {
+        return detail::sender_adaptor_binding{
+            std::bind_back(*this, std::forward<Predicate>(predicate))};
+    }
+};
+
 struct repeat_n_t {
     template <sender Sender>
         requires detail::repeat::compatible<Sender>
@@ -489,6 +515,7 @@ struct repeat_n_t {
 };
 
 inline constexpr repeat_t repeat{};
+inline constexpr repeat_until_t repeat_until{};
 inline constexpr repeat_n_t repeat_n{};
 
 } // namespace esp::execution
