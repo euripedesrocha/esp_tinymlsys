@@ -1,0 +1,15 @@
+menu "esp-execution blink example"
+
+    config ESP_EXECUTION_BLINK_GPIO
+        int "DevKitC-1 RGB LED GPIO"
+        range 0 48
+        default 38
+        help
+            ESP32-S3-DevKitC-1 v1.1 uses GPIO38. Set this to GPIO48 for a v1.0 board.
+
+    config ESP_EXECUTION_BLINK_PERIOD_MS
+        int "Blink period in milliseconds"
+        range 1 60000
+        default 500
+
+endmenu

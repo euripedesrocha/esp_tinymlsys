@@ -4,6 +4,7 @@ dependencies:
 description: A pedagogical C++26 sender/receiver core for ESP-IDF
 examples:
   - path: examples/basic
+  - path: examples/blink
 files:
   use_gitignore: true
 license: Apache-2.0
