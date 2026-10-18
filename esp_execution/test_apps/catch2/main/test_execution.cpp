@@ -104,6 +104,12 @@ struct immovable_receiver {
     immovable_receiver(immovable_receiver&&) = delete;
 };
 
+struct move_only_probe_receiver : probe_receiver {
+    explicit move_only_probe_receiver(probe* state) : probe_receiver{state} {}
+    move_only_probe_receiver(const move_only_probe_receiver&) = delete;
+    move_only_probe_receiver(move_only_probe_receiver&&) = default;
+};
+
 struct invalid_completion_receiver {
     using receiver_concept = receiver_tag;
 
@@ -310,6 +316,9 @@ concept can_connect = requires(Sender&& sender, Receiver&& receiver) {
     { connect(std::forward<Sender>(sender), std::forward<Receiver>(receiver)) } -> operation_state;
 };
 
+template <template <class...> class Type, class... Arguments>
+concept can_form_type = requires { typename Type<Arguments...>; };
+
 template <class Sender, class Closure>
 concept can_pipe = requires(Sender&& sender, Closure&& closure) {
     std::forward<Sender>(sender) | std::forward<Closure>(closure);
@@ -399,6 +408,64 @@ TEST_CASE("connect rejects invalid member connections without substitution error
     STATIC_REQUIRE_FALSE(
         detail::is_nothrow_member_connect_v<connect_sender<true>&, probe_receiver>);
     STATIC_REQUIRE_FALSE(detail::is_nothrow_member_connect_v<connect_sender<true>, int>);
+}
+
+TEST_CASE("receiver compatibility validates the owned completion target", "[receiver][concepts]") {
+    STATIC_REQUIRE(detail::receiver_for_sender<probe_receiver, one_sender>);
+    STATIC_REQUIRE(detail::receiver_for_sender<probe_receiver&, one_sender>);
+    STATIC_REQUIRE(detail::receiver_for_sender<const probe_receiver&, one_sender>);
+    STATIC_REQUIRE(detail::receiver_for_sender<move_only_probe_receiver, one_sender>);
+    STATIC_REQUIRE_FALSE(detail::receiver_for_sender<move_only_probe_receiver&, one_sender>);
+    STATIC_REQUIRE_FALSE(detail::receiver_for_sender<memberless_receiver, one_sender>);
+    STATIC_REQUIRE_FALSE(detail::receiver_for_sender<throwing_env_receiver, one_sender>);
+    STATIC_REQUIRE_FALSE(detail::receiver_for_sender<invalid_completion_receiver, one_sender>);
+    STATIC_REQUIRE_FALSE(detail::receiver_for_sender<int, one_sender>);
+
+    STATIC_REQUIRE(can_connect<one_sender, probe_receiver&>);
+    STATIC_REQUIRE(can_connect<one_sender, move_only_probe_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<one_sender, move_only_probe_receiver&>);
+    STATIC_REQUIRE_FALSE(can_connect<one_sender, memberless_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<one_sender, invalid_completion_receiver>);
+}
+
+TEST_CASE("sender storage types establish their structural invariants", "[concepts][ownership]") {
+    STATIC_REQUIRE(can_form_type<detail::just_sender, set_value_t, int>);
+    STATIC_REQUIRE(can_form_type<detail::just_sender, set_stopped_t>);
+    STATIC_REQUIRE_FALSE(can_form_type<detail::just_sender, set_error_t>);
+    STATIC_REQUIRE_FALSE(can_form_type<detail::just_sender, set_stopped_t, int>);
+    STATIC_REQUIRE_FALSE(can_form_type<detail::just_sender, set_value_t, copy_only_value>);
+    STATIC_REQUIRE(can_form_type<detail::sender_adaptor_binding, increment_callable>);
+    STATIC_REQUIRE_FALSE(can_form_type<detail::sender_adaptor_binding, copy_only_value>);
+}
+
+TEST_CASE("continuation compatibility is a sender class invariant", "[then][concepts]") {
+    STATIC_REQUIRE(
+        can_form_type<detail::continuation_sender, set_value_t, one_sender, increment_callable>);
+    STATIC_REQUIRE_FALSE(
+        can_form_type<detail::continuation_sender, set_value_t, one_sender, noninvocable_callable>);
+    STATIC_REQUIRE_FALSE(
+        can_form_type<detail::continuation_sender, set_value_t, one_sender, throwing_callable>);
+    STATIC_REQUIRE_FALSE(
+        can_form_type<detail::continuation_sender, set_value_t, int, increment_callable>);
+    STATIC_REQUIRE(can_form_type<detail::continuation_sender, set_value_t, error_sender,
+                                 noninvocable_callable>);
+    using work = decltype(then(std::declval<one_sender>(), increment_callable{}));
+    STATIC_REQUIRE(can_connect<work, probe_receiver&>);
+    STATIC_REQUIRE_FALSE(can_connect<work, memberless_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<const work&, memberless_receiver>);
+}
+
+TEST_CASE("connections copy lvalue receivers and complete the owned copy", "[connect][ownership]") {
+    probe completion;
+    probe_receiver receiver{&completion};
+    auto first = connect(just(40), receiver);
+    start(first);
+    REQUIRE(completion.first == 40);
+
+    auto second = connect(just(41) | then(increment_callable{}), std::as_const(receiver));
+    start(second);
+    REQUIRE(completion.first == 42);
+    REQUIRE(completion.values == 2);
 }
 
 TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {

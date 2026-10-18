@@ -107,9 +107,9 @@ concept control_for =
                                                      };
                                                  }>;
 
-template <class Sender, class Control, class Receiver>
-concept operation_compatible = receiver<Receiver> && compatible<Sender, env_of_t<Receiver>> &&
-                               control_for<Control, Sender, env_of_t<Receiver>>;
+template <class Sender, class Control, class Environment = empty_env>
+concept repeat_compatible =
+    compatible<Sender, Environment> && control_for<Control, Sender, Environment>;
 
 template <class Signature> inline constexpr std::size_t error_storage_size_v = 1;
 
@@ -231,7 +231,7 @@ private:
     std::size_t remaining_;
 };
 
-template <class Predicate> class predicate_control {
+template <movable_value Predicate> class predicate_control {
 public:
     static constexpr bool can_complete = true;
 
@@ -252,13 +252,14 @@ private:
 };
 
 template <class Sender, class Control>
-    requires control_for<Control, Sender>
+    requires repeat_compatible<Sender, Control>
 class sender {
 public:
     using sender_concept = sender_tag;
 
     template <class Environment>
-        requires control_for<Control, Sender, Environment>
+        requires std::same_as<Environment, empty_env> ||
+                     repeat_compatible<Sender, Control, Environment>
     using completion_signatures = completion_signatures_cat_t<
         std::conditional_t<Control::can_complete, execution::completion_signatures<set_value_t()>,
                            execution::completion_signatures<>>,
@@ -274,9 +275,8 @@ public:
         return execution::get_env(source_);
     }
 
-    template <class Receiver>
-        requires operation_compatible<Sender, Control, Receiver>
-    class operation {
+private:
+    template <class Receiver> class operation {
         Sender source_;
         Receiver receiver_;
         Control control_;
@@ -426,17 +426,16 @@ public:
         std::atomic<request_type> requested_{0};
     };
 
-    template <class Receiver>
-        requires operation_compatible<Sender, Control, Receiver>
-    constexpr auto connect(Receiver receiver) && {
-        return operation<Receiver>{std::move(source_), std::move(receiver), std::move(control_)};
+public:
+    constexpr auto connect(receiver_for_sender<sender> auto receiver) && {
+        return operation<decltype(receiver)>{std::move(source_), std::move(receiver),
+                                             std::move(control_)};
     }
 
-    template <class Receiver>
-        requires std::copy_constructible<Sender> && std::copy_constructible<Control> &&
-                 operation_compatible<Sender, Control, Receiver>
-    constexpr auto connect(Receiver receiver) const& {
-        return operation<Receiver>{source_, std::move(receiver), control_};
+    constexpr auto connect(receiver_for_sender<sender> auto receiver) const&
+        requires std::copy_constructible<Sender> && std::copy_constructible<Control>
+    {
+        return operation<decltype(receiver)>{source_, std::move(receiver), control_};
     }
 
 private:
@@ -445,18 +444,17 @@ private:
 };
 
 template <class Sender, class Control>
-constexpr auto make_sender(Sender&& source, Control&& control) {
-    return sender<std::decay_t<Sender>, std::decay_t<Control>>{std::forward<Sender>(source),
-                                                               std::forward<Control>(control)};
+constexpr auto make_sender(Sender&& source, Control&& control)
+    -> sender<std::decay_t<Sender>, std::decay_t<Control>> {
+    return {std::forward<Sender>(source), std::forward<Control>(control)};
 }
 
 } // namespace detail::repeat
 
 struct repeat_t {
-    template <sender Sender>
-        requires detail::repeat::compatible<Sender>
-    constexpr auto operator()(Sender&& source) const {
-        return detail::repeat::make_sender(std::forward<Sender>(source),
+    constexpr auto operator()(sender auto&& source) const
+        -> detail::repeat::sender<std::decay_t<decltype(source)>, detail::repeat::forever_control> {
+        return detail::repeat::make_sender(std::forward<decltype(source)>(source),
                                            detail::repeat::forever_control{});
     }
 
@@ -466,29 +464,25 @@ struct repeat_t {
 };
 
 struct repeat_until_t {
-    template <sender Sender, detail::movable_value Predicate>
-        requires detail::repeat::compatible<Sender> &&
-                 detail::repeat::control_for<
-                     detail::repeat::predicate_control<std::decay_t<Predicate>>, Sender>
-    constexpr auto operator()(Sender&& source, Predicate&& predicate) const {
-        using predicate_type = std::decay_t<Predicate>;
+    constexpr auto operator()(sender auto&& source, detail::movable_value auto&& predicate) const
+        -> detail::repeat::sender<
+            std::decay_t<decltype(source)>,
+            detail::repeat::predicate_control<std::decay_t<decltype(predicate)>>> {
         return detail::repeat::make_sender(
-            std::forward<Sender>(source),
-            detail::repeat::predicate_control<predicate_type>{std::forward<Predicate>(predicate)});
+            std::forward<decltype(source)>(source),
+            detail::repeat::predicate_control{std::forward<decltype(predicate)>(predicate)});
     }
 
-    template <detail::movable_value Predicate>
-    constexpr auto operator()(Predicate&& predicate) const {
+    constexpr auto operator()(detail::movable_value auto&& predicate) const {
         return detail::sender_adaptor_binding{
-            std::bind_back(*this, std::forward<Predicate>(predicate))};
+            std::bind_back(*this, std::forward<decltype(predicate)>(predicate))};
     }
 };
 
 struct repeat_n_t {
-    template <sender Sender>
-        requires detail::repeat::compatible<Sender>
-    constexpr auto operator()(Sender&& source, std::size_t count) const {
-        return detail::repeat::make_sender(std::forward<Sender>(source),
+    constexpr auto operator()(sender auto&& source, std::size_t count) const
+        -> detail::repeat::sender<std::decay_t<decltype(source)>, detail::repeat::count_control> {
+        return detail::repeat::make_sender(std::forward<decltype(source)>(source),
                                            detail::repeat::count_control{count});
     }
 

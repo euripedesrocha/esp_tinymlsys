@@ -102,12 +102,15 @@ private:
     Callable callable_;
 };
 
-template <class SelectedTag, class Sender, class Callable> class continuation_sender {
+template <class SelectedTag, class Sender, movable_value Callable>
+    requires continuation_for<Sender, SelectedTag, Callable>
+class continuation_sender {
 public:
     using sender_concept = sender_tag;
 
     template <class Env>
-        requires continuation_for<Sender, SelectedTag, Callable, Env>
+        requires std::same_as<Env, empty_env> ||
+                     continuation_for<Sender, SelectedTag, Callable, Env>
     using completion_signatures =
         continuation_signatures_t<completion_signatures_of_t<Sender, Env>, SelectedTag, Callable>;
 
@@ -116,9 +119,7 @@ public:
 
     constexpr decltype(auto) get_env() const noexcept { return execution::get_env(sender_); }
 
-    constexpr auto connect(receiver auto&& receiver) &&
-        requires continuation_for<Sender, SelectedTag, Callable, env_of_t<decltype(receiver)>>
-    {
+    constexpr auto connect(receiver_for_sender<continuation_sender> auto&& receiver) && {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return execution::connect(
             std::move(sender_),
@@ -126,9 +127,8 @@ public:
                 std::forward<decltype(receiver)>(receiver), std::move(callable_)});
     }
 
-    constexpr auto connect(receiver auto&& receiver) const&
-        requires std::copy_constructible<Sender> && std::copy_constructible<Callable> &&
-                 continuation_for<Sender, SelectedTag, Callable, env_of_t<decltype(receiver)>>
+    constexpr auto connect(receiver_for_sender<continuation_sender> auto&& receiver) const&
+        requires std::copy_constructible<Sender> && std::copy_constructible<Callable>
     {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return execution::connect(sender_,
@@ -141,19 +141,11 @@ private:
     Callable callable_;
 };
 
-template <class SelectedTag>
-constexpr auto attach_continuation(sender_in auto&& sender, movable_value auto&& callable) {
-    return continuation_sender<SelectedTag, std::decay_t<decltype(sender)>,
-                               std::decay_t<decltype(callable)>>{
-        std::forward<decltype(sender)>(sender), std::forward<decltype(callable)>(callable)};
-}
-
 template <class SelectedTag> struct continuation_adaptor {
-    constexpr auto operator()(sender_in auto&& sender, movable_value auto&& callable) const
-        requires continuation_for<decltype(sender), SelectedTag, std::decay_t<decltype(callable)>>
-    {
-        return attach_continuation<SelectedTag>(std::forward<decltype(sender)>(sender),
-                                                std::forward<decltype(callable)>(callable));
+    constexpr auto operator()(sender auto&& source, movable_value auto&& callable) const
+        -> continuation_sender<SelectedTag, std::decay_t<decltype(source)>,
+                               std::decay_t<decltype(callable)>> {
+        return {std::forward<decltype(source)>(source), std::forward<decltype(callable)>(callable)};
     }
 
     constexpr auto operator()(movable_value auto&& callable) const {

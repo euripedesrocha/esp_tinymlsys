@@ -68,6 +68,33 @@ concept member_set_stopped_invocable = receiver<Receiver> && requires(Receiver&&
     { std::forward<Receiver>(receiver).set_stopped() } noexcept -> std::same_as<void>;
 };
 
+template <class Receiver, class Signature> inline constexpr bool accepts_completion_v = false;
+
+template <class Receiver, class... Values>
+inline constexpr bool accepts_completion_v<Receiver, set_value_t(Values...)> =
+    member_set_value_invocable<Receiver, Values...>;
+
+template <class Receiver, class Error>
+inline constexpr bool accepts_completion_v<Receiver, set_error_t(Error)> =
+    member_set_error_invocable<Receiver, Error>;
+
+template <class Receiver>
+inline constexpr bool accepts_completion_v<Receiver, set_stopped_t()> =
+    member_set_stopped_invocable<Receiver>;
+
+template <class Receiver, class Signatures>
+concept receiver_for =
+    receiver<Receiver> && all_completion_signatures_satisfy_v<Signatures, []<class Signature> {
+        return accepts_completion_v<Receiver, Signature>;
+    }>;
+
+// connect owns its receiver: copy or move the argument into storage, then
+// deliver completions to that stored receiver as an rvalue.
+template <class Receiver, class Sender>
+concept receiver_for_sender =
+    std::constructible_from<std::decay_t<Receiver>, Receiver> &&
+    receiver_for<std::decay_t<Receiver>, completion_signatures_of_t<Sender, env_of_t<Receiver>>>;
+
 } // namespace detail
 
 template <class Sender, class Env = empty_env>

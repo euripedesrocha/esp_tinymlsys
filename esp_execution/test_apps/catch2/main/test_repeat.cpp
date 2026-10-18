@@ -157,6 +157,10 @@ struct error_destroying_receiver : destroying_receiver {
 template <class Sender>
 concept can_repeat = requires(Sender&& sender) { execution::repeat(std::forward<Sender>(sender)); };
 
+template <class Sender, class Control>
+concept can_form_repeat_sender =
+    requires { typename execution::detail::repeat::sender<Sender, Control>; };
+
 template <class Storage, class Error>
 concept can_store_error =
     requires(Storage& storage, Error&& error) { storage.emplace(std::forward<Error>(error)); };
@@ -354,6 +358,25 @@ TEST_CASE("pending error accepts only declared and nonthrowing error arguments",
     STATIC_REQUIRE(can_store_error<storage, throwing_copy_error>);
     STATIC_REQUIRE_FALSE(can_store_error<storage, throwing_copy_error&>);
     STATIC_REQUIRE_FALSE(can_store_error<storage, short>);
+}
+
+TEST_CASE("repeat establishes source and control requirements as class invariants",
+          "[repeat][constraints]") {
+    struct error_only_receiver {
+        using receiver_concept = execution::receiver_tag;
+        void set_error(int) && noexcept {}
+    };
+    using namespace execution::detail::repeat;
+    STATIC_REQUIRE(can_form_repeat_sender<decltype(execution::just()), forever_control>);
+    STATIC_REQUIRE(can_form_repeat_sender<decltype(execution::just()), count_control>);
+    STATIC_REQUIRE_FALSE(can_form_repeat_sender<rvalue_only_sender, forever_control>);
+    STATIC_REQUIRE_FALSE(
+        can_form_repeat_sender<decltype(execution::just_error(7)), forever_control>);
+    STATIC_REQUIRE_FALSE(can_form_repeat_sender<reference_error_sender, forever_control>);
+    STATIC_REQUIRE_FALSE(can_form_repeat_sender<decltype(execution::just()), int>);
+
+    using finite = decltype(execution::repeat_n(execution::just(), 1));
+    STATIC_REQUIRE_FALSE(execution::detail::receiver_for_sender<error_only_receiver, finite>);
 }
 
 TEST_CASE("pending error destroys its owned error", "[repeat][error][lifecycle]") {

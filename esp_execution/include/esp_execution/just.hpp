@@ -15,14 +15,14 @@ namespace esp::execution {
 
 namespace detail {
 
-template <class Completion, class... Values> class just_sender {
+template <class Completion, movable_value... Values>
+    requires is_completion_signature<Completion(Values...)>
+class just_sender {
     template <class Receiver> class operation {
     public:
         using operation_state_concept = operation_state_tag;
 
         constexpr operation(auto&& receiver, auto&& values)
-            requires std::constructible_from<Receiver, decltype(receiver)> &&
-                         std::constructible_from<std::tuple<Values...>, decltype(values)>
             : receiver_(std::forward<decltype(receiver)>(receiver)),
               values_(std::forward<decltype(values)>(values)) {}
 
@@ -56,13 +56,13 @@ public:
         requires std::constructible_from<std::tuple<Values...>, decltype(values)...>
         : values_(std::forward<decltype(values)>(values)...) {}
 
-    constexpr auto connect(receiver auto&& receiver) && {
+    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) && {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return operation<receiver_type>{std::forward<decltype(receiver)>(receiver),
                                         std::move(values_)};
     }
 
-    constexpr auto connect(receiver auto&& receiver) const&
+    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) const&
         requires(std::copy_constructible<Values> && ...)
     {
         using receiver_type = std::decay_t<decltype(receiver)>;

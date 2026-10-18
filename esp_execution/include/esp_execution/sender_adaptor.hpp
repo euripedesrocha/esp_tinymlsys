@@ -22,7 +22,7 @@ concept sender_adaptor_closure_type =
                       sender_adaptor_closure<std::remove_cvref_t<Type>>> &&
     (!sender<Type>);
 
-template <class BoundCallable>
+template <movable_value BoundCallable>
 class sender_adaptor_binding
     : public sender_adaptor_closure<sender_adaptor_binding<BoundCallable>> {
 public:
