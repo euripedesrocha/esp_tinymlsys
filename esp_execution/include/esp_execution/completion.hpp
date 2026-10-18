@@ -9,8 +9,6 @@
 
 namespace esp::execution {
 
-template <class... Signatures> struct completion_signatures {};
-
 struct set_value_t {
     constexpr void operator()(receiver auto&& receiver, auto&&... values) const noexcept
         requires detail::member_set_value_invocable<decltype(receiver), decltype(values)...>

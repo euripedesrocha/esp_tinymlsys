@@ -6,10 +6,38 @@
 #include <cstddef>
 #include <type_traits>
 
-#include "esp_execution/completion.hpp"
 #include "esp_execution/detail/meta.hpp"
 
-namespace esp::execution::detail {
+namespace esp::execution {
+
+struct set_value_t;
+struct set_error_t;
+struct set_stopped_t;
+
+template <class... Signatures> struct completion_signatures {};
+
+namespace detail {
+
+template <class Type>
+concept valid_completion_argument = std::is_object_v<Type> || std::is_reference_v<Type>;
+
+template <class Signature> inline constexpr bool is_completion_signature = false;
+
+template <class... Values>
+inline constexpr bool is_completion_signature<set_value_t(Values...)> =
+    (valid_completion_argument<Values> && ...);
+
+template <class Error>
+inline constexpr bool is_completion_signature<set_error_t(Error)> =
+    valid_completion_argument<Error>;
+
+template <> inline constexpr bool is_completion_signature<set_stopped_t()> = true;
+
+template <class Type> inline constexpr bool is_completion_signatures = false;
+
+template <class... Signatures>
+inline constexpr bool is_completion_signatures<completion_signatures<Signatures...>> =
+    (is_completion_signature<Signatures> && ...);
 
 // Predicate is a callable with operator()<Signature>() returning a constant bool.
 // An empty signature list satisfies every predicate; non-lists are rejected.
@@ -84,4 +112,5 @@ template <class Signatures, class Tag>
 inline constexpr std::size_t count_completion_signatures_v =
     count_completion_signatures<Signatures, Tag>::value;
 
-} // namespace esp::execution::detail
+} // namespace detail
+} // namespace esp::execution
