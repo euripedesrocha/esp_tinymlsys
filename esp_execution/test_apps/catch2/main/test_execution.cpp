@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "esp_execution.hpp"
+#include "esp_execution/detail/completion_signatures.hpp"
 
 namespace {
 
@@ -389,6 +390,23 @@ TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
     STATIC_REQUIRE(std::same_as<one_signatures, completion_signatures<set_value_t(int)>>);
     STATIC_REQUIRE(std::same_as<error_signatures, completion_signatures<set_error_t(int)>>);
     STATIC_REQUIRE(std::same_as<stopped_signatures, completion_signatures<set_stopped_t()>>);
+}
+
+TEST_CASE("completion signature predicates check every signature", "[signatures][concepts]") {
+    constexpr auto is_value = []<class Signature> {
+        return detail::completion_signature_matches_tag_v<Signature, set_value_t>;
+    };
+
+    STATIC_REQUIRE(detail::all_completion_signatures_satisfy_v<completion_signatures<>, is_value>);
+    STATIC_REQUIRE(detail::all_completion_signatures_satisfy_v<completion_signatures<set_value_t()>,
+                                                               is_value>);
+    STATIC_REQUIRE(detail::all_completion_signatures_satisfy_v<
+                   completion_signatures<set_value_t(), set_value_t(int)>, is_value>);
+    STATIC_REQUIRE_FALSE(detail::all_completion_signatures_satisfy_v<
+                         completion_signatures<set_error_t(int), set_value_t()>, is_value>);
+    STATIC_REQUIRE_FALSE(detail::all_completion_signatures_satisfy_v<
+                         completion_signatures<set_value_t(), set_stopped_t()>, is_value>);
+    STATIC_REQUIRE_FALSE(detail::all_completion_signatures_satisfy_v<int, is_value>);
 }
 
 TEST_CASE("then transforms every advertised value signature", "[then][signatures]") {

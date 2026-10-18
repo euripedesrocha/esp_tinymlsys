@@ -59,20 +59,13 @@ inline constexpr bool
     continuation_signature_compatible_v<SelectedTag(Arguments...), SelectedTag, Callable> =
         std::is_nothrow_invocable_v<Callable&&, Arguments...>;
 
-template <class SelectedTag, class Callable, class... Signatures>
-consteval bool
-is_continuation_compatible(std::type_identity<completion_signatures<Signatures...>>) {
-    return (continuation_signature_compatible_v<Signatures, SelectedTag, Callable> && ...);
-}
-
-template <class Signatures, class SelectedTag, class Callable>
-concept continuation_compatible =
-    is_continuation_compatible<SelectedTag, Callable>(std::type_identity<Signatures>{});
-
 template <class Sender, class SelectedTag, class Callable, class Env = empty_env>
 concept continuation_for =
     sender_in<Sender, Env> &&
-    continuation_compatible<completion_signatures_of_t<Sender, Env>, SelectedTag, Callable>;
+    all_completion_signatures_satisfy_v<
+        completion_signatures_of_t<Sender, Env>, []<class Signature> {
+            return continuation_signature_compatible_v<Signature, SelectedTag, Callable>;
+        }>;
 
 template <class CompletionFunctionTag, class Receiver, class Callable> class continuation_receiver {
 public:

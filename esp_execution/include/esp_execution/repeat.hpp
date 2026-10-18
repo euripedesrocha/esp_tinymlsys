@@ -86,16 +86,13 @@ template <class Signature> inline constexpr bool storable_error_signature_v = tr
 template <class Error>
 inline constexpr bool storable_error_signature_v<set_error_t(Error)> = storable_error<Error>;
 
-template <class Signatures> inline constexpr bool storable_error_signatures_v = false;
-
-template <class... Signatures>
-inline constexpr bool storable_error_signatures_v<completion_signatures<Signatures...>> =
-    (storable_error_signature_v<Signatures> && ...);
-
 template <class Sender, class Environment = empty_env>
 concept compatible =
     sender_in<Sender, Environment> && lvalue_connectable<Sender, Environment> &&
-    storable_error_signatures_v<completion_signatures_of_t<Sender, Environment>> &&
+    all_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
+                                        []<class Signature> {
+                                            return storable_error_signature_v<Signature>;
+                                        }> &&
     count_completion_signatures_v<completion_signatures_of_t<Sender, Environment>, set_value_t> !=
         0;
 
@@ -109,20 +106,17 @@ inline constexpr bool control_accepts_signature_v<Control, set_value_t(Arguments
         } noexcept -> std::same_as<bool>;
     };
 
-template <class Control, class Signatures>
-inline constexpr bool control_accepts_signatures_v = false;
-
-template <class Control, class... Signatures>
-inline constexpr bool control_accepts_signatures_v<Control, completion_signatures<Signatures...>> =
-    (control_accepts_signature_v<Control, Signatures> && ...);
-
 template <class Control, class Sender, class Environment = empty_env>
 concept control_for =
     sender_in<Sender, Environment> && std::move_constructible<Control> &&
     requires(const Control& control) {
         typename std::bool_constant<Control::can_complete>;
         { control.complete_before_start() } noexcept -> std::same_as<bool>;
-    } && control_accepts_signatures_v<Control, completion_signatures_of_t<Sender, Environment>>;
+    } &&
+    all_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
+                                        []<class Signature> {
+                                            return control_accepts_signature_v<Control, Signature>;
+                                        }>;
 
 template <class Sender, class Control, class Receiver>
 concept operation_compatible = receiver<Receiver> && compatible<Sender, env_of_t<Receiver>> &&

@@ -10,6 +10,16 @@
 
 namespace esp::execution::detail {
 
+// Predicate is a callable with operator()<Signature>() returning a constant bool.
+// An empty signature list satisfies every predicate; non-lists are rejected.
+template <class SignatureList, auto Predicate>
+inline constexpr bool all_completion_signatures_satisfy_v = false;
+
+template <class... Signatures, auto Predicate>
+inline constexpr bool
+    all_completion_signatures_satisfy_v<completion_signatures<Signatures...>, Predicate> =
+        (Predicate.template operator()<Signatures>() && ...);
+
 template <class SignatureList, class Signature> struct append_unique_completion_signature;
 
 template <class... ExistingSignatures, class Signature>
