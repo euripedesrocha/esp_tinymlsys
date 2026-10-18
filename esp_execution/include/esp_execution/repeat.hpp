@@ -81,30 +81,14 @@ concept storable_error =
     std::same_as<Error, std::decay_t<Error>> && std::is_nothrow_move_constructible_v<Error> &&
     std::is_nothrow_destructible_v<Error>;
 
-template <class Signature> inline constexpr bool storable_error_signature_v = true;
-
-template <class Error>
-inline constexpr bool storable_error_signature_v<set_error_t(Error)> = storable_error<Error>;
-
 template <class Sender, class Environment = empty_env>
 concept compatible =
     sender_in<Sender, Environment> && lvalue_connectable<Sender, Environment> &&
-    all_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
-                                        []<class Signature> {
-                                            return storable_error_signature_v<Signature>;
-                                        }> &&
+    all_selected_completion_signatures_satisfy_v<
+        completion_signatures_of_t<Sender, Environment>, set_error_t,
+        []<class Error> { return storable_error<Error>; }> &&
     count_completion_signatures_v<completion_signatures_of_t<Sender, Environment>, set_value_t> !=
         0;
-
-template <class Control, class Signature> inline constexpr bool control_accepts_signature_v = true;
-
-template <class Control, class... Arguments>
-inline constexpr bool control_accepts_signature_v<Control, set_value_t(Arguments...)> =
-    requires(Control& control) {
-        {
-            control.complete_after_value(std::declval<Arguments>()...)
-        } noexcept -> std::same_as<bool>;
-    };
 
 template <class Control, class Sender, class Environment = empty_env>
 concept control_for =
@@ -113,10 +97,15 @@ concept control_for =
         typename std::bool_constant<Control::can_complete>;
         { control.complete_before_start() } noexcept -> std::same_as<bool>;
     } &&
-    all_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
-                                        []<class Signature> {
-                                            return control_accepts_signature_v<Control, Signature>;
-                                        }>;
+    all_selected_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
+                                                 set_value_t, []<class... Arguments> {
+                                                     return requires(Control & control) {
+                                                         {
+                                                             control.complete_after_value(
+                                                                 std::declval<Arguments>()...)
+                                                         } noexcept -> std::same_as<bool>;
+                                                     };
+                                                 }>;
 
 template <class Sender, class Control, class Receiver>
 concept operation_compatible = receiver<Receiver> && compatible<Sender, env_of_t<Receiver>> &&

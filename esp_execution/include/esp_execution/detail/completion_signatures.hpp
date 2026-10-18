@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <type_traits>
 
 #include "esp_execution/completion.hpp"
@@ -19,6 +20,22 @@ template <class... Signatures, auto Predicate>
 inline constexpr bool
     all_completion_signatures_satisfy_v<completion_signatures<Signatures...>, Predicate> =
         (Predicate.template operator()<Signatures>() && ...);
+
+template <class Signature, class SelectedTag, auto Predicate>
+inline constexpr bool selected_completion_satisfies_v = true;
+
+template <class SelectedTag, class... Arguments, auto Predicate>
+inline constexpr bool
+    selected_completion_satisfies_v<SelectedTag(Arguments...), SelectedTag, Predicate> =
+        Predicate.template operator()<Arguments...>();
+
+// Check argument packs only on the selected channel. Other channels never
+// instantiate Predicate, so it need not accept their argument shapes.
+template <class SignatureList, class SelectedTag, auto Predicate>
+inline constexpr bool all_selected_completion_signatures_satisfy_v =
+    all_completion_signatures_satisfy_v<SignatureList, []<class Signature> {
+        return selected_completion_satisfies_v<Signature, SelectedTag, Predicate>;
+    }>;
 
 template <class SignatureList, class Signature> struct append_unique_completion_signature;
 
@@ -66,4 +83,5 @@ struct count_completion_signatures<completion_signatures<Signatures...>, Tag>
 template <class Signatures, class Tag>
 inline constexpr std::size_t count_completion_signatures_v =
     count_completion_signatures<Signatures, Tag>::value;
+
 } // namespace esp::execution::detail

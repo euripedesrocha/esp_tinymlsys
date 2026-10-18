@@ -4,6 +4,7 @@
 #include <concepts>
 #include <memory>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -407,6 +408,55 @@ TEST_CASE("completion signature predicates check every signature", "[signatures]
     STATIC_REQUIRE_FALSE(detail::all_completion_signatures_satisfy_v<
                          completion_signatures<set_value_t(), set_stopped_t()>, is_value>);
     STATIC_REQUIRE_FALSE(detail::all_completion_signatures_satisfy_v<int, is_value>);
+}
+
+TEST_CASE("selected completion predicates inspect only their channel's arguments",
+          "[signatures][concepts]") {
+    constexpr auto is_int = []<class Argument> { return std::same_as<Argument, int>; };
+    using value_and_terminals =
+        completion_signatures<set_value_t(int), set_error_t(long), set_stopped_t()>;
+
+    STATIC_REQUIRE(detail::all_selected_completion_signatures_satisfy_v<value_and_terminals,
+                                                                        set_value_t, is_int>);
+    STATIC_REQUIRE_FALSE(detail::all_selected_completion_signatures_satisfy_v<value_and_terminals,
+                                                                              set_error_t, is_int>);
+    STATIC_REQUIRE_FALSE(
+        detail::all_selected_completion_signatures_satisfy_v<
+            completion_signatures<set_value_t(int), set_value_t(long)>, set_value_t, is_int>);
+    STATIC_REQUIRE(detail::all_selected_completion_signatures_satisfy_v<
+                   completion_signatures<set_error_t(int), set_value_t(), set_stopped_t()>,
+                   set_error_t, is_int>);
+
+    // is_int cannot be called without a template argument. These channels must
+    // be skipped, not merely have their predicate results discarded.
+    STATIC_REQUIRE(
+        detail::all_selected_completion_signatures_satisfy_v<completion_signatures<set_stopped_t()>,
+                                                             set_value_t, is_int>);
+    STATIC_REQUIRE(detail::all_selected_completion_signatures_satisfy_v<completion_signatures<>,
+                                                                        set_value_t, is_int>);
+    STATIC_REQUIRE_FALSE(
+        detail::all_selected_completion_signatures_satisfy_v<int, set_value_t, is_int>);
+
+    constexpr auto no_arguments = []<class... Arguments> { return sizeof...(Arguments) == 0; };
+    STATIC_REQUIRE(
+        detail::all_selected_completion_signatures_satisfy_v<completion_signatures<set_stopped_t()>,
+                                                             set_stopped_t, no_arguments>);
+    STATIC_REQUIRE(
+        detail::all_selected_completion_signatures_satisfy_v<completion_signatures<set_value_t()>,
+                                                             set_value_t, no_arguments>);
+    STATIC_REQUIRE_FALSE(
+        detail::all_selected_completion_signatures_satisfy_v<value_and_terminals, set_value_t,
+                                                             no_arguments>);
+
+    constexpr auto borrowed_arguments = []<class... Arguments> {
+        return std::same_as<std::tuple<Arguments...>, std::tuple<int&, const long&>>;
+    };
+    STATIC_REQUIRE(detail::all_selected_completion_signatures_satisfy_v<
+                   completion_signatures<set_value_t(int&, const long&)>, set_value_t,
+                   borrowed_arguments>);
+    STATIC_REQUIRE_FALSE(detail::all_selected_completion_signatures_satisfy_v<
+                         completion_signatures<set_value_t(const long&, int&)>, set_value_t,
+                         borrowed_arguments>);
 }
 
 TEST_CASE("then transforms every advertised value signature", "[then][signatures]") {

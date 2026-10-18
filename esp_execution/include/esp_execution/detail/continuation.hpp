@@ -51,21 +51,12 @@ template <class Signatures, class SelectedTag, class Callable>
 using continuation_signatures_t =
     typename continuation_signatures<Signatures, SelectedTag, Callable>::type;
 
-template <class Signature, class SelectedTag, class Callable>
-inline constexpr bool continuation_signature_compatible_v = true;
-
-template <class SelectedTag, class... Arguments, class Callable>
-inline constexpr bool
-    continuation_signature_compatible_v<SelectedTag(Arguments...), SelectedTag, Callable> =
-        std::is_nothrow_invocable_v<Callable&&, Arguments...>;
-
 template <class Sender, class SelectedTag, class Callable, class Env = empty_env>
 concept continuation_for =
     sender_in<Sender, Env> &&
-    all_completion_signatures_satisfy_v<
-        completion_signatures_of_t<Sender, Env>, []<class Signature> {
-            return continuation_signature_compatible_v<Signature, SelectedTag, Callable>;
-        }>;
+    all_selected_completion_signatures_satisfy_v<
+        completion_signatures_of_t<Sender, Env>, SelectedTag,
+        []<class... Arguments> { return std::is_nothrow_invocable_v<Callable&&, Arguments...>; }>;
 
 template <class CompletionFunctionTag, class Receiver, class Callable> class continuation_receiver {
 public:
