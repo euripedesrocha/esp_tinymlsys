@@ -48,6 +48,7 @@ struct threaded_completion {
         if (timing == completion_timing::after_start_returns) {
             start_returned.release();
         }
+        worker.join();
     }
 };
 
