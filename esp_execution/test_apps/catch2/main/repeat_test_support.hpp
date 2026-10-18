@@ -284,6 +284,16 @@ private:
     }
 };
 
+struct value_destroying_receiver : destroying_receiver {
+    using destroying_receiver::destroying_receiver;
+    using destroying_receiver::set_value;
+
+    void set_value(int value) && noexcept {
+        state->completion.value = value;
+        std::move(static_cast<destroying_receiver&>(*this)).set_value();
+    }
+};
+
 template <class Receiver = destroying_receiver, class Sender, class Run>
 result run_and_destroy(Sender sender, Run run) {
     destruction_record state;

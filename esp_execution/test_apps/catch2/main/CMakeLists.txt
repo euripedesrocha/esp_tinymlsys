@@ -6,6 +6,7 @@ idf_component_register(
         "test_repeat.cpp"
         "test_repeat_n.cpp"
         "test_repeat_until.cpp"
+        "test_let_value.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE
