@@ -20,13 +20,10 @@ concept member_connectable =
     };
 
 template <class Sender, class Receiver>
-inline constexpr bool is_nothrow_member_connect_v = [] {
-    if constexpr (member_connectable<Sender, Receiver>) {
-        return noexcept(std::declval<Sender>().connect(std::declval<Receiver>()));
-    } else {
-        return false;
-    }
-}();
+inline constexpr bool is_nothrow_member_connect_v =
+    member_connectable<Sender, Receiver> && requires(Sender&& sender, Receiver&& receiver) {
+        { std::forward<Sender>(sender).connect(std::forward<Receiver>(receiver)) } noexcept;
+    };
 
 } // namespace detail
 

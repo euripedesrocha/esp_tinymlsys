@@ -192,6 +192,10 @@ template <bool IsNoexcept> struct connect_sender {
     constexpr auto connect(receiver auto&&) && noexcept(IsNoexcept) { return simple_operation{}; }
 };
 
+struct nonoperation_connect_sender : minimal_sender {
+    constexpr int connect(receiver auto&&) && noexcept { return 0; }
+};
+
 class environment_observing_sender {
     template <class Receiver> class operation {
     public:
@@ -381,6 +385,20 @@ TEST_CASE("public customization operations enforce their contracts", "[concepts]
         noexcept(connect(std::declval<nothrow_sender>(), std::declval<probe_receiver>())));
     STATIC_REQUIRE_FALSE(noexcept(
         connect(std::declval<potentially_throwing_sender>(), std::declval<probe_receiver>())));
+}
+
+TEST_CASE("connect rejects invalid member connections without substitution errors",
+          "[connect][concepts]") {
+    STATIC_REQUIRE_FALSE(can_connect<minimal_sender, probe_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<nonoperation_connect_sender, probe_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<connect_sender<true>&, probe_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<connect_sender<true>, int>);
+    STATIC_REQUIRE_FALSE(detail::is_nothrow_member_connect_v<minimal_sender, probe_receiver>);
+    STATIC_REQUIRE_FALSE(
+        detail::is_nothrow_member_connect_v<nonoperation_connect_sender, probe_receiver>);
+    STATIC_REQUIRE_FALSE(
+        detail::is_nothrow_member_connect_v<connect_sender<true>&, probe_receiver>);
+    STATIC_REQUIRE_FALSE(detail::is_nothrow_member_connect_v<connect_sender<true>, int>);
 }
 
 TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
