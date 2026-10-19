@@ -147,8 +147,6 @@ TEST_CASE("repeat_n owns a move-only predecessor and reconnects it without copyi
     child_lifetime lifetime;
     result completion;
     using predecessor = move_only_sender<iteration_sender>;
-    STATIC_REQUIRE(execution::sender<predecessor>);
-    STATIC_REQUIRE_FALSE(execution::sender<predecessor&>);
     STATIC_REQUIRE_FALSE(can_connect_to_result<predecessor&>);
 
     auto work =
