@@ -39,18 +39,6 @@ struct continuation_signature<SelectedTag(Arguments...), SelectedTag, Callable> 
         continuation_result_signature_t<std::invoke_result_t<Callable&&, Arguments...>>>;
 };
 
-template <class Signatures, class SelectedTag, class Callable> struct continuation_signatures;
-
-template <class... Signatures, class SelectedTag, class Callable>
-struct continuation_signatures<completion_signatures<Signatures...>, SelectedTag, Callable> {
-    using type = completion_signatures_cat_t<
-        typename continuation_signature<Signatures, SelectedTag, Callable>::type...>;
-};
-
-template <class Signatures, class SelectedTag, class Callable>
-using continuation_signatures_t =
-    typename continuation_signatures<Signatures, SelectedTag, Callable>::type;
-
 template <class Sender, class SelectedTag, class Callable, class Env = empty_env>
 concept continuation_for =
     sender_in<Sender, Env> &&
@@ -112,7 +100,8 @@ public:
         requires std::same_as<Env, empty_env> ||
                      continuation_for<Sender, SelectedTag, Callable, Env>
     using completion_signatures =
-        continuation_signatures_t<completion_signatures_of_t<Sender, Env>, SelectedTag, Callable>;
+        map_completion_signatures_t<completion_signatures_of_t<Sender, Env>, continuation_signature,
+                                    SelectedTag, Callable>;
 
     constexpr continuation_sender(Sender sender, Callable callable)
         : sender_(std::move(sender)), callable_(std::move(callable)) {}

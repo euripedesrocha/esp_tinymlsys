@@ -79,6 +79,20 @@ using completion_signatures_cat_t =
     fold_left_lists_t<completion_signatures<>, append_unique_completion_signature,
                       SignaturesList...>;
 
+// Mapper<Signature, Context...>::type supplies a signature list for each input.
+// Concatenate those lists, retaining only the first occurrence of each signature.
+template <class SignatureList, template <class...> class Mapper, class... Context>
+struct map_completion_signatures;
+
+template <class... Signatures, template <class...> class Mapper, class... Context>
+struct map_completion_signatures<completion_signatures<Signatures...>, Mapper, Context...> {
+    using type = completion_signatures_cat_t<typename Mapper<Signatures, Context...>::type...>;
+};
+
+template <class SignatureList, template <class...> class Mapper, class... Context>
+using map_completion_signatures_t =
+    typename map_completion_signatures<SignatureList, Mapper, Context...>::type;
+
 template <class Signature, class ExpectedTag>
 inline constexpr bool completion_signature_matches_tag_v = false;
 
@@ -86,18 +100,14 @@ template <class ActualTag, class... Arguments, class ExpectedTag>
 inline constexpr bool completion_signature_matches_tag_v<ActualTag(Arguments...), ExpectedTag> =
     std::is_same_v<ActualTag, ExpectedTag>;
 
-template <class Signatures, class Tag> struct remove_completion_signatures_for;
-
-template <class... Signatures, class Tag>
-struct remove_completion_signatures_for<completion_signatures<Signatures...>, Tag> {
-    using type = completion_signatures_cat_t<
-        std::conditional_t<completion_signature_matches_tag_v<Signatures, Tag>,
-                           completion_signatures<>, completion_signatures<Signatures>>...>;
+template <class Signature, class Tag> struct remove_completion_signature_for {
+    using type = std::conditional_t<completion_signature_matches_tag_v<Signature, Tag>,
+                                    completion_signatures<>, completion_signatures<Signature>>;
 };
 
 template <class Signatures, class Tag>
 using remove_completion_signatures_for_t =
-    typename remove_completion_signatures_for<Signatures, Tag>::type;
+    map_completion_signatures_t<Signatures, remove_completion_signature_for, Tag>;
 
 template <class Signatures, class Tag> struct count_completion_signatures;
 

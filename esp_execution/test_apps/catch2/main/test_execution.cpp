@@ -339,6 +339,14 @@ template <class Receiver>
 concept can_set_stopped =
     requires(Receiver&& receiver) { set_stopped(std::forward<Receiver>(receiver)); };
 
+template <class Signature, class SelectedTag, class Replacement> struct replace_selected_signature {
+    using type =
+        std::conditional_t<detail::completion_signature_matches_tag_v<Signature, SelectedTag>,
+                           Replacement, completion_signatures<Signature>>;
+};
+
+template <class Signature> struct undefined_signature_mapping;
+
 } // namespace
 
 TEST_CASE("public vocabulary concepts distinguish each role", "[concepts]") {
@@ -476,6 +484,34 @@ TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
     STATIC_REQUIRE(std::same_as<one_signatures, completion_signatures<set_value_t(int)>>);
     STATIC_REQUIRE(std::same_as<error_signatures, completion_signatures<set_error_t(int)>>);
     STATIC_REQUIRE(std::same_as<stopped_signatures, completion_signatures<set_stopped_t()>>);
+}
+
+TEST_CASE("completion signature mapping flattens and deduplicates its results", "[signatures]") {
+    using input = completion_signatures<set_value_t(int), set_error_t(long), set_stopped_t()>;
+    using replacement =
+        completion_signatures<set_error_t(long), set_value_t(short), set_error_t(long)>;
+    using mapped = detail::map_completion_signatures_t<input, replace_selected_signature,
+                                                       set_value_t, replacement>;
+    STATIC_REQUIRE(
+        std::same_as<
+            mapped, completion_signatures<set_error_t(long), set_value_t(short), set_stopped_t()>>);
+    STATIC_REQUIRE(
+        std::same_as<detail::map_completion_signatures_t<input, replace_selected_signature,
+                                                         set_value_t, completion_signatures<>>,
+                     completion_signatures<set_error_t(long), set_stopped_t()>>);
+    STATIC_REQUIRE(std::same_as<detail::map_completion_signatures_t<
+                                    completion_signatures<set_value_t(int), set_value_t(long)>,
+                                    replace_selected_signature, set_value_t, replacement>,
+                                completion_signatures<set_error_t(long), set_value_t(short)>>);
+    STATIC_REQUIRE(
+        std::same_as<detail::map_completion_signatures_t<
+                         completion_signatures<set_value_t(int&), set_error_t(const long&)>,
+                         replace_selected_signature, set_error_t, completion_signatures<>>,
+                     completion_signatures<set_value_t(int&)>>);
+    // No input signatures means the mapping must not be instantiated.
+    STATIC_REQUIRE(std::same_as<detail::map_completion_signatures_t<completion_signatures<>,
+                                                                    undefined_signature_mapping>,
+                                completion_signatures<>>);
 }
 
 TEST_CASE("completion signature predicates check every signature", "[signatures][concepts]") {
