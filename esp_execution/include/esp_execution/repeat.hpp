@@ -16,6 +16,7 @@
 #include "esp_execution/completion.hpp"
 #include "esp_execution/concepts.hpp"
 #include "esp_execution/connect.hpp"
+#include "esp_execution/detail/completion_scheduler.hpp"
 #include "esp_execution/detail/completion_signatures.hpp"
 #include "esp_execution/detail/operation_state_storage.hpp"
 #include "esp_execution/environment.hpp"
@@ -272,7 +273,10 @@ public:
         : source_(std::move(source)), control_(std::move(control)) {}
 
     constexpr decltype(auto) get_env() const noexcept(noexcept(execution::get_env(source_))) {
-        return execution::get_env(source_);
+        // Control may finish before starting a child, and the processing loop
+        // may deliver a terminal completion on a different execution agent.
+        return hide_completion_scheduler_attributes<set_value_t, set_error_t, set_stopped_t>(
+            source_);
     }
 
 private:

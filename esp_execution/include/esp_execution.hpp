@@ -11,6 +11,7 @@
 #include "esp_execution/completion.hpp"
 #include "esp_execution/operation_state.hpp"
 #include "esp_execution/connect.hpp"
+#include "esp_execution/scheduler.hpp"
 
 // Sender factories and adaptors.
 #include "esp_execution/sender_adaptor.hpp"

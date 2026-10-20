@@ -15,6 +15,23 @@ namespace esp::execution {
 struct receiver_tag {};
 struct operation_state_tag {};
 struct sender_tag {};
+struct scheduler_tag {};
+
+template <class CompletionTag> struct get_completion_scheduler_t;
+
+namespace detail {
+
+template <class Type>
+concept movable_value = std::move_constructible<std::decay_t<Type>> &&
+                        std::constructible_from<std::decay_t<Type>, Type> &&
+                        (!std::is_array_v<std::remove_reference_t<Type>>);
+
+template <class CompletionTag>
+concept completion_tag =
+    std::same_as<CompletionTag, set_value_t> || std::same_as<CompletionTag, set_error_t> ||
+    std::same_as<CompletionTag, set_stopped_t>;
+
+} // namespace detail
 
 template <class Receiver>
 concept receiver =
@@ -40,12 +57,13 @@ template <class Sender, class Env = empty_env>
 using completion_signatures_of_t =
     typename std::remove_cvref_t<Sender>::template completion_signatures<Env>;
 
-namespace detail {
+template <class Sender, class Env = empty_env>
+concept sender_in = sender<Sender> && requires {
+    typename completion_signatures_of_t<Sender, Env>;
+    requires detail::is_completion_signatures<completion_signatures_of_t<Sender, Env>>;
+};
 
-template <class Type>
-concept movable_value = std::move_constructible<std::decay_t<Type>> &&
-                        std::constructible_from<std::decay_t<Type>, Type> &&
-                        (!std::is_array_v<std::remove_reference_t<Type>>);
+namespace detail {
 
 template <class Receiver, class... Values>
 concept member_set_value_invocable =
@@ -95,12 +113,37 @@ concept receiver_for_sender =
     std::constructible_from<std::decay_t<Receiver>, Receiver> &&
     receiver_for<std::decay_t<Receiver>, completion_signatures_of_t<Sender, env_of_t<Receiver>>>;
 
+template <class Scheduler>
+concept member_schedule_invocable = requires(Scheduler&& scheduler) {
+    { std::forward<Scheduler>(scheduler).schedule() } -> sender;
+};
+
 } // namespace detail
 
-template <class Sender, class Env = empty_env>
-concept sender_in = sender<Sender> && requires {
-    typename completion_signatures_of_t<Sender, Env>;
-    requires detail::is_completion_signatures<completion_signatures_of_t<Sender, Env>>;
-};
+template <class Scheduler>
+concept scheduler =
+    std::derived_from<typename std::remove_cvref_t<Scheduler>::scheduler_concept, scheduler_tag> &&
+    std::copy_constructible<std::remove_cvref_t<Scheduler>> &&
+    std::equality_comparable<std::remove_cvref_t<Scheduler>> &&
+    detail::member_schedule_invocable<Scheduler> &&
+    requires(
+        const std::remove_reference_t<env_of_t<decltype(std::declval<Scheduler>().schedule())>>&
+            env) {
+        {
+            auto(env.query(std::declval<get_completion_scheduler_t<set_value_t>>()))
+        } noexcept -> std::same_as<std::remove_cvref_t<Scheduler>>;
+    };
+
+namespace detail {
+
+template <class Env, class CompletionTag>
+concept completion_scheduler_provider =
+    completion_tag<CompletionTag> && requires(const std::remove_reference_t<Env>& env) {
+        {
+            env.query(std::declval<get_completion_scheduler_t<CompletionTag>>())
+        } noexcept -> scheduler;
+    };
+
+} // namespace detail
 
 } // namespace esp::execution

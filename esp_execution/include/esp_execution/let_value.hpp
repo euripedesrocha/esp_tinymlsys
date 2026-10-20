@@ -12,6 +12,7 @@
 #include "esp_execution/completion.hpp"
 #include "esp_execution/concepts.hpp"
 #include "esp_execution/connect.hpp"
+#include "esp_execution/detail/completion_scheduler.hpp"
 #include "esp_execution/detail/completion_signatures.hpp"
 #include "esp_execution/detail/completion_storage.hpp"
 #include "esp_execution/detail/operation_state_storage.hpp"
@@ -167,7 +168,13 @@ public:
     sender(Sender source, Callable callable)
         : source_(std::move(source)), callable_(std::move(callable)) {}
 
-    decltype(auto) get_env() const noexcept { return execution::get_env(source_); }
+    decltype(auto) get_env() const noexcept {
+        // The sender returned by the callable may deliver a value, error, or
+        // stopped completion on a different execution resource. The source's
+        // completion schedulers therefore cannot describe this sender's outcomes.
+        return hide_completion_scheduler_attributes<set_value_t, set_error_t, set_stopped_t>(
+            source_);
+    }
 
     auto connect(receiver_for_sender<sender> auto receiver) && {
         return operation<decltype(receiver)>{std::move(source_), std::move(receiver),

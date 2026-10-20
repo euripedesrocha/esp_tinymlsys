@@ -11,6 +11,7 @@
 #include "esp_execution/completion.hpp"
 #include "esp_execution/concepts.hpp"
 #include "esp_execution/connect.hpp"
+#include "esp_execution/detail/completion_scheduler.hpp"
 #include "esp_execution/detail/completion_signatures.hpp"
 #include "esp_execution/environment.hpp"
 #include "esp_execution/sender_adaptor.hpp"
@@ -106,7 +107,14 @@ public:
     constexpr continuation_sender(Sender sender, Callable callable)
         : sender_(std::move(sender)), callable_(std::move(callable)) {}
 
-    constexpr decltype(auto) get_env() const noexcept { return execution::get_env(sender_); }
+    constexpr decltype(auto) get_env() const noexcept {
+        if constexpr (std::same_as<SelectedTag, set_value_t>) {
+            return execution::get_env(sender_);
+        } else {
+            // Recovering a terminal channel can produce a value on another resource.
+            return hide_completion_scheduler_attributes<set_value_t, SelectedTag>(sender_);
+        }
+    }
 
     constexpr auto connect(receiver_for_sender<continuation_sender> auto&& receiver) && {
         using receiver_type = std::decay_t<decltype(receiver)>;
