@@ -12,6 +12,7 @@
 
 #include "esp_execution.hpp"
 #include "esp_execution/detail/completion_signatures.hpp"
+#include "esp_execution/detail/completion_storage.hpp"
 
 namespace {
 
@@ -339,13 +340,24 @@ template <class Receiver>
 concept can_set_stopped =
     requires(Receiver&& receiver) { set_stopped(std::forward<Receiver>(receiver)); };
 
-template <class Signature, class SelectedTag, class Replacement> struct replace_selected_signature {
-    using type =
-        std::conditional_t<detail::completion_signature_matches_tag_v<Signature, SelectedTag>,
-                           Replacement, completion_signatures<Signature>>;
+template <class SelectedTag, class Replacement>
+inline constexpr auto replace_selected_signature = []<class Tag, class... Arguments> {
+    using result = std::conditional_t<std::same_as<Tag, SelectedTag>, Replacement,
+                                      completion_signatures<Tag(Arguments...)>>;
+    return std::type_identity<result>{};
 };
 
-template <class Signature> struct undefined_signature_mapping;
+inline constexpr auto undefined_signature_mapping = []<class... Arguments>
+    requires false
+{};
+
+template <class SignatureList, auto Transform>
+concept can_map_completion_signatures =
+    requires { typename detail::map_completion_signatures_t<SignatureList, Transform>; };
+
+template <class SignatureList, auto Transform>
+concept can_form_completion_storage =
+    requires { typename detail::completion_storage_t<SignatureList, Transform>; };
 
 } // namespace
 
@@ -497,28 +509,98 @@ TEST_CASE("completion signature mapping flattens and deduplicates its results", 
     using input = completion_signatures<set_value_t(int), set_error_t(long), set_stopped_t()>;
     using replacement =
         completion_signatures<set_error_t(long), set_value_t(short), set_error_t(long)>;
-    using mapped = detail::map_completion_signatures_t<input, replace_selected_signature,
-                                                       set_value_t, replacement>;
+    using mapped =
+        detail::map_completion_signatures_t<input,
+                                            replace_selected_signature<set_value_t, replacement>>;
     STATIC_REQUIRE(
         std::same_as<
             mapped, completion_signatures<set_error_t(long), set_value_t(short), set_stopped_t()>>);
     STATIC_REQUIRE(
-        std::same_as<detail::map_completion_signatures_t<input, replace_selected_signature,
-                                                         set_value_t, completion_signatures<>>,
+        std::same_as<detail::map_completion_signatures_t<
+                         input, replace_selected_signature<set_value_t, completion_signatures<>>>,
                      completion_signatures<set_error_t(long), set_stopped_t()>>);
     STATIC_REQUIRE(std::same_as<detail::map_completion_signatures_t<
                                     completion_signatures<set_value_t(int), set_value_t(long)>,
-                                    replace_selected_signature, set_value_t, replacement>,
+                                    replace_selected_signature<set_value_t, replacement>>,
                                 completion_signatures<set_error_t(long), set_value_t(short)>>);
     STATIC_REQUIRE(
         std::same_as<detail::map_completion_signatures_t<
                          completion_signatures<set_value_t(int&), set_error_t(const long&)>,
-                         replace_selected_signature, set_error_t, completion_signatures<>>,
+                         replace_selected_signature<set_error_t, completion_signatures<>>>,
                      completion_signatures<set_value_t(int&)>>);
     // No input signatures means the mapping must not be instantiated.
     STATIC_REQUIRE(std::same_as<detail::map_completion_signatures_t<completion_signatures<>,
                                                                     undefined_signature_mapping>,
                                 completion_signatures<>>);
+}
+
+TEST_CASE("completion signature transformations receive the tag and original arguments",
+          "[signatures]") {
+    constexpr auto as_tuple = []<class Tag, class... Arguments> {
+        return std::type_identity<std::tuple<Tag, Arguments...>>{};
+    };
+    STATIC_REQUIRE(std::same_as<detail::apply_completion_signature_t<set_value_t(int&), as_tuple>,
+                                std::tuple<set_value_t, int&>>);
+    STATIC_REQUIRE(
+        std::same_as<detail::apply_completion_signature_t<set_error_t(const long&), as_tuple>,
+                     std::tuple<set_error_t, const long&>>);
+    STATIC_REQUIRE(std::same_as<detail::apply_completion_signature_t<set_value_t(), as_tuple>,
+                                std::tuple<set_value_t>>);
+    STATIC_REQUIRE(std::same_as<detail::apply_completion_signature_t<set_stopped_t(), as_tuple>,
+                                std::tuple<set_stopped_t>>);
+    STATIC_REQUIRE_FALSE(detail::completion_signature_transformable<int, as_tuple>);
+    STATIC_REQUIRE_FALSE(detail::completion_signature_transformable<int(int), as_tuple>);
+}
+
+TEST_CASE("completion transformations reject unavailable calls and malformed results cleanly",
+          "[signatures][constraints]") {
+    constexpr auto value_only = []<class Tag, class... Arguments>
+        requires std::same_as<Tag, set_value_t>
+    { return std::type_identity<completion_signatures<Tag(Arguments...)>>{}; };
+    constexpr auto not_a_type = []<class Tag, class... Arguments> { return 0; };
+    constexpr auto not_signatures = []<class Tag, class... Arguments> {
+        return std::type_identity<int>{};
+    };
+    using value = completion_signatures<set_value_t(int)>;
+    using mixed = completion_signatures<set_value_t(int), set_error_t(long)>;
+    STATIC_REQUIRE(can_map_completion_signatures<value, value_only>);
+    STATIC_REQUIRE_FALSE(can_map_completion_signatures<mixed, value_only>);
+    STATIC_REQUIRE_FALSE(can_form_completion_storage<mixed, value_only>);
+    STATIC_REQUIRE_FALSE(detail::completion_signature_transformable<set_value_t(int), not_a_type>);
+    STATIC_REQUIRE_FALSE(can_map_completion_signatures<value, not_a_type>);
+    STATIC_REQUIRE_FALSE(can_form_completion_storage<value, not_a_type>);
+    STATIC_REQUIRE_FALSE(can_map_completion_signatures<value, not_signatures>);
+    STATIC_REQUIRE_FALSE(can_map_completion_signatures<int, value_only>);
+    STATIC_REQUIRE_FALSE(can_form_completion_storage<int, value_only>);
+    STATIC_REQUIRE(std::same_as<detail::completion_storage_t<value, not_signatures>,
+                                std::variant<std::monostate, int>>);
+}
+
+TEST_CASE("completion storage keeps the first occurrence of each transformed alternative",
+          "[signatures][storage]") {
+    constexpr auto decayed_tuple = []<class Tag, class... Arguments> {
+        return std::type_identity<std::tuple<Tag, std::decay_t<Arguments>...>>{};
+    };
+    using input =
+        completion_signatures<set_value_t(int&), set_error_t(const long&), set_value_t(const int&),
+                              set_stopped_t(), set_error_t(long)>;
+    STATIC_REQUIRE(
+        std::same_as<detail::completion_storage_t<input, decayed_tuple>,
+                     std::variant<std::monostate, std::tuple<set_value_t, int>,
+                                  std::tuple<set_error_t, long>, std::tuple<set_stopped_t>>>);
+    constexpr auto value_storage = []<class Tag, class... Arguments> {
+        if constexpr (std::same_as<Tag, set_value_t>) {
+            return std::type_identity<std::tuple<std::decay_t<Arguments>...>>{};
+        } else {
+            return std::type_identity<std::monostate>{};
+        }
+    };
+    STATIC_REQUIRE(std::same_as<detail::completion_storage_t<input, value_storage>,
+                                std::variant<std::monostate, std::tuple<int>>>);
+    STATIC_REQUIRE(
+        std::same_as<
+            detail::completion_storage_t<completion_signatures<>, undefined_signature_mapping>,
+            std::variant<std::monostate>>);
 }
 
 TEST_CASE("completion signature predicates check every signature", "[signatures][concepts]") {

@@ -39,6 +39,31 @@ template <class... Signatures>
 inline constexpr bool is_completion_signatures<completion_signatures<Signatures...>> =
     (is_completion_signature<Signatures> && ...);
 
+// Type transformations return a type carrier, normally std::type_identity<T>.
+template <auto Transform, class... Arguments>
+concept type_transform_for =
+    requires { typename decltype(Transform.template operator()<Arguments...>())::type; };
+
+template <auto Transform, class Tag, class... Arguments>
+    requires is_completion_signature<Tag(Arguments...)> &&
+             type_transform_for<Transform, Tag, Arguments...>
+consteval auto apply_completion_signature(std::type_identity<Tag(Arguments...)>) {
+    return Transform.template operator()<Tag, Arguments...>();
+}
+
+template <class Signature, auto Transform>
+using apply_completion_signature_t =
+    typename decltype(apply_completion_signature<Transform>(std::type_identity<Signature>{}))::type;
+
+template <class Signature, auto Transform>
+concept completion_signature_transformable =
+    requires { typename apply_completion_signature_t<Signature, Transform>; };
+
+template <class Signature, auto Transform>
+concept completion_signature_mapper_for =
+    completion_signature_transformable<Signature, Transform> &&
+    is_completion_signatures<apply_completion_signature_t<Signature, Transform>>;
+
 // Predicate is a callable with operator()<Signature>() returning a constant bool.
 // An empty signature list satisfies every predicate; non-lists are rejected.
 template <class SignatureList, auto Predicate>
@@ -79,19 +104,20 @@ using completion_signatures_cat_t =
     fold_left_lists_t<completion_signatures<>, append_unique_completion_signature,
                       SignaturesList...>;
 
-// Mapper<Signature, Context...>::type supplies a signature list for each input.
+// Transform.operator()<Tag, Arguments...>() supplies a signature-list type carrier.
 // Concatenate those lists, retaining only the first occurrence of each signature.
-template <class SignatureList, template <class...> class Mapper, class... Context>
-struct map_completion_signatures;
+template <class SignatureList, auto Transform> struct map_completion_signatures;
 
-template <class... Signatures, template <class...> class Mapper, class... Context>
-struct map_completion_signatures<completion_signatures<Signatures...>, Mapper, Context...> {
-    using type = completion_signatures_cat_t<typename Mapper<Signatures, Context...>::type...>;
+template <class... Signatures, auto Transform>
+    requires(completion_signature_mapper_for<Signatures, Transform> && ...)
+struct map_completion_signatures<completion_signatures<Signatures...>, Transform> {
+    using type =
+        completion_signatures_cat_t<apply_completion_signature_t<Signatures, Transform>...>;
 };
 
-template <class SignatureList, template <class...> class Mapper, class... Context>
+template <class SignatureList, auto Transform>
 using map_completion_signatures_t =
-    typename map_completion_signatures<SignatureList, Mapper, Context...>::type;
+    typename map_completion_signatures<SignatureList, Transform>::type;
 
 template <class Signature, class ExpectedTag>
 inline constexpr bool completion_signature_matches_tag_v = false;
@@ -100,14 +126,13 @@ template <class ActualTag, class... Arguments, class ExpectedTag>
 inline constexpr bool completion_signature_matches_tag_v<ActualTag(Arguments...), ExpectedTag> =
     std::is_same_v<ActualTag, ExpectedTag>;
 
-template <class Signature, class Tag> struct remove_completion_signature_for {
-    using type = std::conditional_t<completion_signature_matches_tag_v<Signature, Tag>,
-                                    completion_signatures<>, completion_signatures<Signature>>;
-};
-
 template <class Signatures, class Tag>
 using remove_completion_signatures_for_t =
-    map_completion_signatures_t<Signatures, remove_completion_signature_for, Tag>;
+    map_completion_signatures_t<Signatures, []<class ActualTag, class... Arguments> {
+        using result = std::conditional_t<std::is_same_v<ActualTag, Tag>, completion_signatures<>,
+                                          completion_signatures<ActualTag(Arguments...)>>;
+        return std::type_identity<result>{};
+    }>;
 
 template <class Signatures, class Tag> struct count_completion_signatures;
 

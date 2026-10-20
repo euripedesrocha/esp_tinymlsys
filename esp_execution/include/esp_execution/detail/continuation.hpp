@@ -30,16 +30,6 @@ template <class Result>
 using continuation_result_signature_t =
     typename decltype(continuation_result_signature<Result>())::type;
 
-template <class Signature, class SelectedTag, class Callable> struct continuation_signature {
-    using type = completion_signatures<Signature>;
-};
-
-template <class SelectedTag, class... Arguments, class Callable>
-struct continuation_signature<SelectedTag(Arguments...), SelectedTag, Callable> {
-    using type = completion_signatures<
-        continuation_result_signature_t<std::invoke_result_t<Callable&&, Arguments...>>>;
-};
-
 template <class Sender, class SelectedTag, class Callable, class Env = empty_env>
 concept continuation_for =
     sender_in<Sender, Env> &&
@@ -100,9 +90,16 @@ public:
     template <class Env>
         requires std::same_as<Env, empty_env> ||
                      continuation_for<Sender, SelectedTag, Callable, Env>
-    using completion_signatures =
-        map_completion_signatures_t<completion_signatures_of_t<Sender, Env>, continuation_signature,
-                                    SelectedTag, Callable>;
+    using completion_signatures = map_completion_signatures_t<
+        completion_signatures_of_t<Sender, Env>, []<class Tag, class... Arguments> {
+            if constexpr (std::same_as<Tag, SelectedTag>) {
+                using result =
+                    continuation_result_signature_t<std::invoke_result_t<Callable&&, Arguments...>>;
+                return std::type_identity<execution::completion_signatures<result>>{};
+            } else {
+                return std::type_identity<execution::completion_signatures<Tag(Arguments...)>>{};
+            }
+        }>;
 
     constexpr continuation_sender(Sender sender, Callable callable)
         : sender_(std::move(sender)), callable_(std::move(callable)) {}

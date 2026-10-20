@@ -37,16 +37,6 @@ concept let_value_compatible =
             };
         }>;
 
-template <class Signature, class Callable, class Env> struct result_signatures {
-    using type = completion_signatures<Signature>;
-};
-
-template <class... Values, class Callable, class Env>
-struct result_signatures<set_value_t(Values...), Callable, Env> {
-    using child_sender = std::invoke_result_t<Callable&&, std::decay_t<Values>&...>;
-    using type = completion_signatures_of_t<child_sender, Env>;
-};
-
 template <class Sender, movable_value Callable>
     requires let_value_compatible<Sender, Callable>
 class sender {
@@ -101,13 +91,6 @@ class sender {
             }
         };
 
-        template <class Signature> struct alternative {
-            using type = std::monostate;
-        };
-        template <class... Values> struct alternative<set_value_t(Values...)> {
-            using type = branch<std::tuple<std::decay_t<Values>...>>;
-        };
-
         class upstream_receiver {
         public:
             using receiver_concept = receiver_tag;
@@ -134,7 +117,15 @@ class sender {
         upstream_operation upstream_;
         // Branches die before upstream, so both input and source state remain
         // alive for any child-operation destructor.
-        completion_storage_t<completion_signatures_of_t<Sender, env_of_t<Receiver>>, alternative>
+        completion_storage_t<completion_signatures_of_t<Sender, env_of_t<Receiver>>,
+                             []<class Tag, class... Values> {
+                                 if constexpr (std::same_as<Tag, set_value_t>) {
+                                     return std::type_identity<
+                                         branch<std::tuple<std::decay_t<Values>...>>>{};
+                                 } else {
+                                     return std::type_identity<std::monostate>{};
+                                 }
+                             }>
             branches_;
 
     public:
@@ -161,9 +152,15 @@ public:
     // introduce additional compatibility requirements.
     template <class Env>
         requires std::same_as<Env, empty_env> || let_value_compatible<Sender, Callable, Env>
-    using completion_signatures =
-        map_completion_signatures_t<completion_signatures_of_t<Sender, Env>, result_signatures,
-                                    Callable, Env>;
+    using completion_signatures = map_completion_signatures_t<
+        completion_signatures_of_t<Sender, Env>, []<class Tag, class... Values> {
+            if constexpr (std::same_as<Tag, set_value_t>) {
+                using child_sender = std::invoke_result_t<Callable&&, std::decay_t<Values>&...>;
+                return std::type_identity<completion_signatures_of_t<child_sender, Env>>{};
+            } else {
+                return std::type_identity<execution::completion_signatures<Tag(Values...)>>{};
+            }
+        }>;
 
     sender(Sender source, Callable callable)
         : source_(std::move(source)), callable_(std::move(callable)) {}

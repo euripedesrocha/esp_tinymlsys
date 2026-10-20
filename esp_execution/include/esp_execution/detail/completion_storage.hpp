@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "esp_execution/completion.hpp"
+#include "esp_execution/detail/completion_signatures.hpp"
 #include "esp_execution/detail/meta.hpp"
 
 namespace esp::execution::detail {
@@ -19,15 +20,16 @@ struct append_unique_alternative<std::variant<Types...>, Type> {
                                     std::variant<Types..., Type>>;
 };
 
-template <class Signatures, template <class> class Alternative> struct completion_storage;
+template <class Signatures, auto Transform> struct completion_storage;
 
-template <class... Signatures, template <class> class Alternative>
-struct completion_storage<completion_signatures<Signatures...>, Alternative> {
+template <class... Signatures, auto Transform>
+    requires(completion_signature_transformable<Signatures, Transform> && ...)
+struct completion_storage<completion_signatures<Signatures...>, Transform> {
     using type = fold_left_t<std::variant<std::monostate>, append_unique_alternative,
-                             typename Alternative<Signatures>::type...>;
+                             apply_completion_signature_t<Signatures, Transform>...>;
 };
 
-template <class Signatures, template <class> class Alternative>
-using completion_storage_t = typename completion_storage<Signatures, Alternative>::type;
+template <class Signatures, auto Transform>
+using completion_storage_t = typename completion_storage<Signatures, Transform>::type;
 
 } // namespace esp::execution::detail
