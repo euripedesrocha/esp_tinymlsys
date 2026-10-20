@@ -112,6 +112,11 @@ template <class Sender, class Control, class Environment = empty_env>
 concept repeat_compatible =
     compatible<Sender, Environment> && control_for<Control, Sender, Environment>;
 
+// The sender's class constraint has already validated empty_env.
+template <class Environment, class Sender, class Control>
+concept compatible_environment =
+    std::same_as<Environment, empty_env> || repeat_compatible<Sender, Control, Environment>;
+
 template <class Signature> inline constexpr std::size_t error_storage_size_v = 1;
 
 template <class Error>
@@ -258,9 +263,7 @@ class sender {
 public:
     using sender_concept = sender_tag;
 
-    template <class Environment>
-        requires std::same_as<Environment, empty_env> ||
-                     repeat_compatible<Sender, Control, Environment>
+    template <compatible_environment<Sender, Control> Environment>
     using completion_signatures = completion_signatures_cat_t<
         std::conditional_t<Control::can_complete, execution::completion_signatures<set_value_t()>,
                            execution::completion_signatures<>>,

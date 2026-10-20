@@ -37,6 +37,11 @@ concept let_value_compatible =
             };
         }>;
 
+// The sender's class constraint has already validated empty_env.
+template <class Env, class Sender, class Callable>
+concept compatible_environment =
+    std::same_as<Env, empty_env> || let_value_compatible<Sender, Callable, Env>;
+
 template <class Sender, movable_value Callable>
     requires let_value_compatible<Sender, Callable>
 class sender {
@@ -148,10 +153,7 @@ class sender {
 public:
     using sender_concept = sender_tag;
 
-    // Compatibility with empty_env is a class invariant. Only new environments
-    // introduce additional compatibility requirements.
-    template <class Env>
-        requires std::same_as<Env, empty_env> || let_value_compatible<Sender, Callable, Env>
+    template <compatible_environment<Sender, Callable> Env>
     using completion_signatures = map_completion_signatures_t<
         completion_signatures_of_t<Sender, Env>, []<class Tag, class... Values> {
             if constexpr (std::same_as<Tag, set_value_t>) {
