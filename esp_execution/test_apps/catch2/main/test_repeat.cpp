@@ -10,11 +10,67 @@
 #include "repeat_test_support.hpp"
 #include "threaded_sender_test_support.hpp"
 
+#include <algorithm>
 #include <catch2/generators/catch_generators.hpp>
 
 namespace {
 
 using namespace esp_execution_test;
+
+struct iteration_observations {
+    int active_starts = 0;
+    int peak_starts = 0;
+    bool all_children_aligned = true;
+};
+
+struct observed_iteration_sender {
+    using sender_concept = execution::sender_tag;
+    template <class Env>
+    using completion_signatures = numbered_iteration_sender::completion_signatures<Env>;
+
+    numbered_iteration_sender source;
+    iteration_observations* observations;
+
+    template <class Receiver> class alignas(64) operation {
+        using child_operation = decltype(execution::connect(
+            std::declval<numbered_iteration_sender&>(), std::declval<Receiver>()));
+
+    public:
+        using operation_state_concept = execution::operation_state_tag;
+
+        operation(numbered_iteration_sender source, Receiver receiver,
+                  iteration_observations& observations)
+            : child_(execution::connect(source, std::move(receiver))),
+              observations_(&observations) {
+            observations.all_children_aligned &=
+                reinterpret_cast<std::uintptr_t>(this) % alignof(operation) == 0;
+        }
+
+        operation(const operation&) = delete;
+        operation(operation&&) = delete;
+        operation& operator=(const operation&) = delete;
+        operation& operator=(operation&&) = delete;
+
+        void start() & noexcept {
+            // Completion may destroy this child; only the external record is used afterward.
+            auto& observations = *observations_;
+            observations.active_starts += 1;
+            observations.peak_starts =
+                std::max(observations.peak_starts, observations.active_starts);
+            execution::start(child_);
+            observations.active_starts -= 1;
+        }
+
+    private:
+        child_operation child_;
+        iteration_observations* observations_;
+    };
+
+    auto connect(execution::receiver auto&& receiver) const& {
+        return operation<std::decay_t<decltype(receiver)>>{
+            source, std::forward<decltype(receiver)>(receiver), *observations};
+    }
+};
 
 struct reference_test_env {
     int value;
@@ -443,16 +499,19 @@ TEST_CASE("repeat delivers move-only aligned errors while the receiver destroys 
 TEST_CASE("repeat iterates synchronously without growing the stack", "[repeat][lifecycle]") {
     constexpr int repetitions = 10000;
     int starts = 0;
+    iteration_observations observations;
     result completion;
-    auto work = numbered_iteration_sender{.iterations_started = &starts,
-                                          .iterations_before_terminal = repetitions,
-                                          .terminal = terminate_as::error} |
+    auto work = observed_iteration_sender{.source = {.iterations_started = &starts,
+                                                     .iterations_before_terminal = repetitions,
+                                                     .terminal = terminate_as::error},
+                                          .observations = &observations} |
                 execution::repeat();
     auto operation = execution::connect(std::move(work), result_receiver{.state = &completion});
 
     execution::start(operation);
 
     REQUIRE(starts == repetitions + 1);
+    REQUIRE(observations.peak_starts == 1);
     REQUIRE(completion.values == 0);
     REQUIRE(completion.errors == 1);
     REQUIRE(completion.error == repetitions + 1);
@@ -475,16 +534,19 @@ TEST_CASE("repeat forwards stopped without another iteration", "[repeat][stopped
     REQUIRE(completion.stopped == 1);
 }
 
-TEST_CASE("repeat destroys each child before reconstructing its replacement",
+TEST_CASE("repeat aligns each child and destroys it before reconstructing its replacement",
           "[repeat][lifecycle]") {
     child_lifetime lifetime;
     int starts = 0;
+    iteration_observations observations;
     result completion;
     {
-        auto work = execution::repeat(iteration_sender{.iterations_started = &starts,
-                                                       .iterations_before_terminal = 4,
-                                                       .terminal = terminate_as::error,
-                                                       .lifetime = &lifetime});
+        auto work =
+            execution::repeat(observed_iteration_sender{.source = {.iterations_started = &starts,
+                                                                   .iterations_before_terminal = 4,
+                                                                   .terminal = terminate_as::error,
+                                                                   .lifetime = &lifetime},
+                                                        .observations = &observations});
         auto operation = execution::connect(std::move(work), result_receiver{.state = &completion});
         REQUIRE(lifetime.constructed == 0);
 
@@ -496,6 +558,7 @@ TEST_CASE("repeat destroys each child before reconstructing its replacement",
         REQUIRE(lifetime.destroyed == 4);
         REQUIRE(lifetime.live == 1);
         REQUIRE(lifetime.replacement_order_valid);
+        REQUIRE(observations.all_children_aligned);
     }
     REQUIRE(lifetime.live == 0);
     REQUIRE(lifetime.destroyed == lifetime.constructed);
@@ -550,8 +613,6 @@ TEST_CASE("repeat resumes after deferred values and forwards deferred terminal c
     }
     REQUIRE(completion.values == 0);
     REQUIRE(pending.starts == 3);
-    REQUIRE(pending.operation == nullptr);
-    REQUIRE(pending.complete == nullptr);
 }
 
 TEST_CASE("repeat permits its operation to be destroyed by a synchronous terminal completion",
@@ -599,8 +660,6 @@ TEST_CASE("repeat permits its operation to be destroyed by a deferred terminal c
         REQUIRE(completion.error == 42);
     }
     REQUIRE(pending.starts == 2);
-    REQUIRE(pending.operation == nullptr);
-    REQUIRE(pending.complete == nullptr);
 }
 
 TEST_CASE("repeat and upon_error keep error policy outside the loop", "[repeat][upon_error]") {

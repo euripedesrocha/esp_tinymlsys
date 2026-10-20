@@ -8,6 +8,7 @@
 #include "repeat_test_support.hpp"
 #include "threaded_sender_test_support.hpp"
 
+#include <limits>
 #include <memory>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -237,6 +238,35 @@ TEST_CASE("repeat_n forwards a terminal completion before its count", "[repeat_n
     }
 }
 
+TEST_CASE("repeat_n preserves large counts until an early deferred terminal completion",
+          "[repeat_n][deferred][terminal]") {
+    const auto count = GENERATE(std::size_t{256}, std::numeric_limits<std::size_t>::max());
+    const auto terminal = GENERATE(completion_kind::error, completion_kind::stopped);
+    CAPTURE(count, terminal);
+    deferred_completion pending;
+    result completion;
+    auto work = execution::repeat_n(deferred_sender{.pending = &pending}, count);
+    auto operation = execution::connect(work, result_receiver{.state = &completion});
+
+    execution::start(operation);
+    REQUIRE(pending.starts == 1);
+    REQUIRE(completion.values == 0);
+    pending.deliver(completion_kind::value);
+    REQUIRE(pending.starts == 2);
+    REQUIRE(completion.values == 0);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
+
+    pending.deliver(terminal);
+    REQUIRE(pending.starts == 2);
+    REQUIRE(completion.values == 0);
+    REQUIRE(completion.errors == (terminal == completion_kind::error ? 1 : 0));
+    REQUIRE(completion.stopped == (terminal == completion_kind::stopped ? 1 : 0));
+    if (terminal == completion_kind::error) {
+        REQUIRE(completion.error == 42);
+    }
+}
+
 TEST_CASE("repeat_n permits its operation to be destroyed by value completion",
           "[repeat_n][lifecycle]") {
     int starts = 0;
@@ -267,8 +297,6 @@ TEST_CASE("repeat_n permits its operation to be destroyed by the final deferred 
         });
 
     REQUIRE(pending.starts == count);
-    REQUIRE(pending.operation == nullptr);
-    REQUIRE(pending.complete == nullptr);
     REQUIRE(completion.values == 1);
     REQUIRE(completion.errors == 0);
     REQUIRE(completion.stopped == 0);

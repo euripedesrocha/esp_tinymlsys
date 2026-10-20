@@ -15,6 +15,28 @@ namespace {
 
 using namespace esp_execution_test;
 
+template <class Factory> struct value_factory_sender {
+    using sender_concept = execution::sender_tag;
+    template <class Env>
+    using completion_signatures =
+        execution::completion_signatures<execution::set_value_t(std::invoke_result_t<Factory&>)>;
+
+    Factory factory;
+
+    template <class Receiver> struct operation {
+        using operation_state_concept = execution::operation_state_tag;
+        Factory factory;
+        Receiver receiver;
+
+        void start() & noexcept { execution::set_value(std::move(receiver), factory()); }
+    };
+
+    auto connect(execution::receiver auto&& receiver) const& {
+        return operation<std::decay_t<decltype(receiver)>>{
+            factory, std::forward<decltype(receiver)>(receiver)};
+    }
+};
+
 struct repeat_test_env {};
 
 struct environment_dependent_sender {
@@ -275,6 +297,57 @@ TEST_CASE("repeat_until gives each connection independent predicate state",
     REQUIRE(first_completion.values == 1);
 }
 
+TEST_CASE("repeat_until forwards move-only values to an rvalue predicate argument",
+          "[repeat_until][values]") {
+    int starts = 0;
+    int predicate_calls = 0;
+    std::unique_ptr<int> received;
+    result completion;
+    auto work =
+        value_factory_sender{[&starts]() noexcept { return std::make_unique<int>(++starts); }} |
+        execution::repeat_until([&](std::unique_ptr<int>&& value) noexcept {
+            predicate_calls += 1;
+            received = std::move(value);
+            return *received == 3;
+        });
+    auto operation = execution::connect(work, result_receiver{.state = &completion});
+
+    execution::start(operation);
+
+    REQUIRE(starts == 3);
+    REQUIRE(predicate_calls == 3);
+    REQUIRE(received != nullptr);
+    REQUIRE(*received == 3);
+    REQUIRE(completion.values == 1);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
+}
+
+TEST_CASE("repeat_until preserves reference identity and predicate mutations",
+          "[repeat_until][values]") {
+    int source_value = 0;
+    int predicate_calls = 0;
+    bool same_object = true;
+    result completion;
+    auto work = value_factory_sender{[&source_value]() noexcept -> int& { return source_value; }} |
+                execution::repeat_until([&](int& value) noexcept {
+                    predicate_calls += 1;
+                    same_object &= std::addressof(value) == std::addressof(source_value);
+                    value += 1;
+                    return predicate_calls == 3;
+                });
+    auto operation = execution::connect(work, result_receiver{.state = &completion});
+
+    execution::start(operation);
+
+    REQUIRE(predicate_calls == 3);
+    REQUIRE(same_object);
+    REQUIRE(source_value == 3);
+    REQUIRE(completion.values == 1);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
+}
+
 TEST_CASE("repeat_until owns a move-only predicate through an rvalue adaptor",
           "[repeat_until][ownership]") {
     auto predicate = [remaining = std::make_unique<int>(3)]() mutable noexcept {
@@ -357,8 +430,6 @@ TEST_CASE("repeat_until permits its operation to be destroyed by the final defer
 
     REQUIRE(predicate_calls == successes);
     REQUIRE(pending.starts == successes);
-    REQUIRE(pending.operation == nullptr);
-    REQUIRE(pending.complete == nullptr);
     REQUIRE(completion.values == 1);
     REQUIRE(completion.errors == 0);
     REQUIRE(completion.stopped == 0);

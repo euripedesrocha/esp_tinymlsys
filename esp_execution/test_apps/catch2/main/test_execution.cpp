@@ -465,15 +465,22 @@ TEST_CASE("continuation compatibility is a sender class invariant", "[then][conc
 
 TEST_CASE("connections copy lvalue receivers and complete the owned copy", "[connect][ownership]") {
     probe completion;
+    probe replacement;
     probe_receiver receiver{&completion};
     auto first = connect(just(40), receiver);
+    receiver.result = &replacement;
     start(first);
     REQUIRE(completion.first == 40);
+    REQUIRE(completion.values == 1);
+    REQUIRE(replacement.completions() == 0);
 
+    receiver.result = &completion;
     auto second = connect(just(41) | then(increment_callable{}), std::as_const(receiver));
+    receiver.result = &replacement;
     start(second);
     REQUIRE(completion.first == 42);
     REQUIRE(completion.values == 2);
+    REQUIRE(replacement.completions() == 0);
 }
 
 TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
@@ -853,6 +860,36 @@ TEST_CASE("then delivers move-only results as rvalues", "[then]") {
 
     REQUIRE(result.completions() == 1);
     REQUIRE(result.first == 42);
+}
+
+TEST_CASE("then forwards move-only inputs to its callable", "[then]") {
+    probe result;
+
+    SECTION("value result") {
+        auto sender = just(std::make_unique<int>(40)) |
+                      then([](std::unique_ptr<int> value) noexcept { return *value + 2; });
+        auto operation = connect(std::move(sender), probe_receiver{&result});
+
+        start(operation);
+
+        REQUIRE(result.first == 42);
+        REQUIRE(result.arity == 1);
+    }
+
+    SECTION("void result") {
+        int observed = 0;
+        auto sender = just(std::make_unique<int>(42)) |
+                      then([&observed](std::unique_ptr<int> value) noexcept { observed = *value; });
+        auto operation = connect(std::move(sender), probe_receiver{&result});
+
+        start(operation);
+
+        REQUIRE(observed == 42);
+        REQUIRE(result.arity == 0);
+    }
+
+    REQUIRE(result.completions() == 1);
+    REQUIRE(result.values == 1);
 }
 
 TEST_CASE("a copyable then sender creates independent operation states", "[then][lifecycle]") {
