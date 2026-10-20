@@ -8,6 +8,7 @@ idf_component_register(
         "test_repeat_until.cpp"
         "test_let_value.cpp"
         "test_scheduler.cpp"
+        "test_continues_on.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE

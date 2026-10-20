@@ -20,4 +20,5 @@
 #include "esp_execution/upon_error.hpp"
 #include "esp_execution/upon_stopped.hpp"
 #include "esp_execution/let_value.hpp"
+#include "esp_execution/continues_on.hpp"
 #include "esp_execution/repeat.hpp"
