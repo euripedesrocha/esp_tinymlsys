@@ -16,6 +16,8 @@ idf_component_register(
         "test_freertos_chrono.cpp"
         "test_freertos_semaphore.cpp"
         "test_freertos_event_group.cpp"
+        "test_freertos_task_context.cpp"
+        "test_freertos_task_context_integration.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE
