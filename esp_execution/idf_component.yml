@@ -15,6 +15,8 @@ tags:
   - execution
   - senders
   - receivers
+  - freertos
+  - schedulers
   - cxx26
 url: https://github.com/euripedesrocha/esp_tinymlsys/tree/main/esp_execution
 version: 0.1.0
