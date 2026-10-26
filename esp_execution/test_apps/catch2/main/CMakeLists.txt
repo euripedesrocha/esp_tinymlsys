@@ -10,6 +10,7 @@ idf_component_register(
         "test_let_value.cpp"
         "test_scheduler.cpp"
         "test_continues_on.cpp"
+        "test_freertos_wait.cpp"
         "test_freertos_task_context.cpp"
         "test_freertos_task_context_integration.cpp"
     INCLUDE_DIRS
