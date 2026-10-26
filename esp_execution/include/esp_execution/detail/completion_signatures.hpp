@@ -90,19 +90,9 @@ inline constexpr bool all_selected_completion_signatures_satisfy_v =
         return selected_completion_satisfies_v<Signature, SelectedTag, Predicate>;
     }>;
 
-template <class SignatureList, class Signature> struct append_unique_completion_signature;
-
-template <class... ExistingSignatures, class Signature>
-struct append_unique_completion_signature<completion_signatures<ExistingSignatures...>, Signature> {
-    using type = std::conditional_t<(std::is_same_v<Signature, ExistingSignatures> || ...),
-                                    completion_signatures<ExistingSignatures...>,
-                                    completion_signatures<ExistingSignatures..., Signature>>;
-};
-
 template <class... SignaturesList>
 using completion_signatures_cat_t =
-    fold_left_lists_t<completion_signatures<>, append_unique_completion_signature,
-                      SignaturesList...>;
+    fold_left_lists_t<completion_signatures<>, append_unique_type, SignaturesList...>;
 
 // Transform.operator()<Tag, Arguments...>() supplies a signature-list type carrier.
 // Concatenate those lists, retaining only the first occurrence of each signature.
