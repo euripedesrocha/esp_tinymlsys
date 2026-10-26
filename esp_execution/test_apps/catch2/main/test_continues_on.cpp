@@ -3,8 +3,7 @@
 
 #include "esp_execution/continues_on.hpp"
 #include "esp_execution/just.hpp"
-#include "manual_scheduler_test_support.hpp"
-#include "repeat_test_support.hpp"
+#include "esp_execution_test/execution.hpp"
 
 #include <catch2/generators/catch_generators.hpp>
 

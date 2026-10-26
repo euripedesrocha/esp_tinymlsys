@@ -4,8 +4,7 @@
 #include "esp_execution/just.hpp"
 #include "esp_execution/repeat.hpp"
 
-#include "deferred_sender_test_support.hpp"
-#include "repeat_test_support.hpp"
+#include "esp_execution_test/execution.hpp"
 
 #include <memory>
 #include <tuple>

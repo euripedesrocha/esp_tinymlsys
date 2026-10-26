@@ -6,14 +6,23 @@
 #include "esp_execution/repeat.hpp"
 #include "esp_execution/then.hpp"
 
-#include "deferred_sender_test_support.hpp"
-#include "repeat_test_support.hpp"
+#include "esp_execution_test/execution.hpp"
 
 #include <catch2/generators/catch_generators.hpp>
 
 namespace {
 
 using namespace esp_execution_test;
+
+struct value_destroying_receiver : destroying_receiver {
+    using destroying_receiver::destroying_receiver;
+    using destroying_receiver::set_value;
+
+    void set_value(int value) && noexcept {
+        state->completion.value = value;
+        std::move(static_cast<destroying_receiver&>(*this)).set_value();
+    }
+};
 
 template <class Source, class Callable>
 concept can_let_value = requires(Source&& source, Callable&& callable) {

@@ -10,8 +10,8 @@
 
 #include "esp_execution.hpp"
 #include "esp_execution/freertos/task_context.hpp"
-#include "freertos_task_test_support.hpp"
-#include "repeat_test_support.hpp"
+#include "esp_execution_test/freertos.hpp"
+#include "esp_execution_test/execution.hpp"
 
 namespace {
 

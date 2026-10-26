@@ -8,8 +8,7 @@
 #include "esp_execution/then.hpp"
 #include "esp_execution/upon_error.hpp"
 #include "esp_execution/upon_stopped.hpp"
-#include "manual_scheduler_test_support.hpp"
-#include "repeat_test_support.hpp"
+#include "esp_execution_test/execution.hpp"
 
 namespace {
 using namespace esp_execution_test;

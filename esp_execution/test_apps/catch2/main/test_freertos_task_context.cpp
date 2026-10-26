@@ -20,7 +20,7 @@
 #include "esp_execution/freertos/task_context.hpp"
 #include "esp_freertos_cpp/event_group.hpp"
 #include "esp_freertos_cpp/semaphore.hpp"
-#include "freertos_task_test_support.hpp"
+#include "esp_execution_test/freertos.hpp"
 
 namespace {
 

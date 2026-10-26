@@ -19,5 +19,6 @@ idf_component_register(
         console
         esp_execution
         esp_freertos_cpp
+        esp_execution_test_support
         freertos
 )

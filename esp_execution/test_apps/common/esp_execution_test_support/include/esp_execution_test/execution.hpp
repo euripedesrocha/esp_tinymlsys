@@ -6,6 +6,8 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <semaphore>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -16,6 +18,7 @@
 #include "esp_execution/connect.hpp"
 #include "esp_execution/environment.hpp"
 #include "esp_execution/operation_state.hpp"
+#include "esp_execution/scheduler.hpp"
 
 namespace esp_execution_test {
 
@@ -284,16 +287,6 @@ private:
     }
 };
 
-struct value_destroying_receiver : destroying_receiver {
-    using destroying_receiver::destroying_receiver;
-    using destroying_receiver::set_value;
-
-    void set_value(int value) && noexcept {
-        state->completion.value = value;
-        std::move(static_cast<destroying_receiver&>(*this)).set_value();
-    }
-};
-
 template <class Receiver = destroying_receiver, class Sender, class Run>
 result run_and_destroy(Sender sender, Run run) {
     destruction_record state;
@@ -313,5 +306,198 @@ result complete_and_destroy(Sender sender) {
     return run_and_destroy<Receiver>(std::move(sender),
                                      [](auto& operation) { execution::start(operation); });
 }
+
+enum class completion_kind : std::uint8_t { value, error, stopped };
+
+// One pending completion at a time; the test chooses when the child finishes.
+struct deferred_completion {
+    void* operation = nullptr;
+    void (*complete)(void*, completion_kind) noexcept = nullptr;
+    int starts = 0;
+
+    void deliver(completion_kind kind) {
+        REQUIRE(operation != nullptr);
+        REQUIRE(complete != nullptr);
+        auto* pending = std::exchange(operation, nullptr);
+        auto callback = std::exchange(complete, nullptr);
+        callback(pending, kind);
+    }
+};
+
+struct deferred_sender {
+    using sender_concept = esp::execution::sender_tag;
+
+    template <class Env>
+    using completion_signatures =
+        esp::execution::completion_signatures<esp::execution::set_value_t(),
+                                              esp::execution::set_error_t(int),
+                                              esp::execution::set_stopped_t()>;
+
+    deferred_completion* pending;
+
+    template <class Receiver> class operation {
+    public:
+        using operation_state_concept = esp::execution::operation_state_tag;
+
+        operation(deferred_completion& pending, Receiver receiver)
+            : pending_(&pending), receiver_(std::move(receiver)) {}
+
+        operation(const operation&) = delete;
+        operation(operation&&) = delete;
+        operation& operator=(const operation&) = delete;
+        operation& operator=(operation&&) = delete;
+
+        void start() & noexcept {
+            pending_->starts += 1;
+            pending_->operation = this;
+            pending_->complete = [](void* erased, completion_kind kind) noexcept {
+                // Completion may destroy this child or the whole parent operation.
+                auto receiver = std::move(static_cast<operation*>(erased)->receiver_);
+                switch (kind) {
+                case completion_kind::value:
+                    esp::execution::set_value(std::move(receiver));
+                    break;
+                case completion_kind::error:
+                    esp::execution::set_error(std::move(receiver), 42);
+                    break;
+                case completion_kind::stopped:
+                    esp::execution::set_stopped(std::move(receiver));
+                    break;
+                }
+            };
+        }
+
+    private:
+        deferred_completion* pending_;
+        Receiver receiver_;
+    };
+
+    auto connect(esp::execution::receiver auto&& receiver) const& {
+        return operation<std::decay_t<decltype(receiver)>>{
+            *pending, std::forward<decltype(receiver)>(receiver)};
+    }
+};
+
+struct manual_scheduler {
+    using scheduler_concept = esp::execution::scheduler_tag;
+    deferred_completion* pending;
+
+    struct schedule_sender : deferred_sender {
+        struct environment {
+            deferred_completion* pending;
+
+            auto query(esp::execution::get_completion_scheduler_t<esp::execution::set_value_t>)
+                const noexcept -> manual_scheduler {
+                return {pending};
+            }
+        };
+
+        auto get_env() const noexcept -> environment { return {pending}; }
+    };
+
+    auto schedule() const noexcept { return schedule_sender{{.pending = pending}}; }
+    friend bool operator==(manual_scheduler, manual_scheduler) noexcept = default;
+};
+
+enum class completion_timing { before_start_returns, after_start_returns };
+
+// A single worker delivers completions. Each publication transfers the pending
+// child to that worker; no test assertions execute on the worker thread.
+struct threaded_completion {
+    completion_timing timing;
+    std::binary_semaphore ready{0};
+    std::binary_semaphore delivered{0};
+    std::binary_semaphore start_returned{0};
+    int starts = 0;
+    void* operation = nullptr;
+    void (*complete)(void*, completion_kind) noexcept = nullptr;
+
+    void deliver(completion_kind kind) {
+        ready.acquire();
+        auto* pending = operation;
+        auto callback = complete;
+        callback(pending, kind);
+        if (timing == completion_timing::before_start_returns) {
+            delivered.release();
+        }
+    }
+
+    void run(auto& operation, int values_before_terminal, completion_kind terminal) {
+        std::jthread worker([&] {
+            if (timing == completion_timing::after_start_returns) {
+                start_returned.acquire();
+            }
+            for (int iteration = 0; iteration < values_before_terminal; ++iteration) {
+                deliver(completion_kind::value);
+            }
+            deliver(terminal);
+        });
+        esp::execution::start(operation);
+        if (timing == completion_timing::after_start_returns) {
+            start_returned.release();
+        }
+        worker.join();
+    }
+};
+
+struct threaded_sender {
+    using sender_concept = esp::execution::sender_tag;
+
+    template <class Env>
+    using completion_signatures =
+        esp::execution::completion_signatures<esp::execution::set_value_t(),
+                                              esp::execution::set_error_t(int),
+                                              esp::execution::set_stopped_t()>;
+
+    threaded_completion& pending;
+
+    template <class Receiver> class operation {
+    public:
+        using operation_state_concept = esp::execution::operation_state_tag;
+
+        operation(threaded_completion& pending, Receiver receiver)
+            : pending_(pending), receiver_(std::move(receiver)) {}
+
+        operation(const operation&) = delete;
+        operation(operation&&) = delete;
+        operation& operator=(const operation&) = delete;
+        operation& operator=(operation&&) = delete;
+
+        void start() & noexcept {
+            // Keep all state needed after publication outside this operation:
+            // completion can destroy the child before start returns.
+            auto& pending = pending_;
+            pending.starts += 1;
+            pending.operation = this;
+            pending.complete = [](void* erased, completion_kind kind) noexcept {
+                auto receiver = std::move(static_cast<operation*>(erased)->receiver_);
+                switch (kind) {
+                case completion_kind::value:
+                    esp::execution::set_value(std::move(receiver));
+                    break;
+                case completion_kind::error:
+                    esp::execution::set_error(std::move(receiver), 42);
+                    break;
+                case completion_kind::stopped:
+                    esp::execution::set_stopped(std::move(receiver));
+                    break;
+                }
+            };
+            pending.ready.release();
+            if (pending.timing == completion_timing::before_start_returns) {
+                pending.delivered.acquire();
+            }
+        }
+
+    private:
+        threaded_completion& pending_;
+        Receiver receiver_;
+    };
+
+    auto connect(esp::execution::receiver auto&& receiver) const& {
+        return operation<std::decay_t<decltype(receiver)>>{
+            pending, std::forward<decltype(receiver)>(receiver)};
+    }
+};
 
 } // namespace esp_execution_test

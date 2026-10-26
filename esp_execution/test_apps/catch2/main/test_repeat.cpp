@@ -6,9 +6,7 @@
 #include "esp_execution/upon_error.hpp"
 #include "esp_execution/upon_stopped.hpp"
 
-#include "deferred_sender_test_support.hpp"
-#include "repeat_test_support.hpp"
-#include "threaded_sender_test_support.hpp"
+#include "esp_execution_test/execution.hpp"
 
 #include <algorithm>
 #include <catch2/generators/catch_generators.hpp>
