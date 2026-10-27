@@ -16,7 +16,7 @@
 
 #include "esp_execution/completion.hpp"
 #include "esp_execution/concepts.hpp"
-#include "esp_execution/freertos/chrono.hpp"
+#include "esp_freertos_cpp/chrono.hpp"
 #include "esp_execution/scheduler.hpp"
 
 namespace esp::execution::freertos {
@@ -36,7 +36,7 @@ public:
     /** Positive finite timeout, rounded up to the next whole FreeRTOS tick. */
     [[nodiscard]] static constexpr auto wait_for(std::chrono::nanoseconds timeout) noexcept
         -> submission_policy pre(timeout > std::chrono::nanoseconds::zero()) {
-        return {to_ticks(timeout)};
+        return {esp::freertos::to_ticks(timeout)};
     }
 
 private:

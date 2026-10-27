@@ -10,15 +10,15 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
-#include "esp_execution/freertos/semaphore.hpp"
+#include "esp_freertos_cpp/semaphore.hpp"
 
-#if CONFIG_IDF_TARGET_ESP32S3
+#if CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_GPTIMER_ISR_CACHE_SAFE
 #include <driver/gptimer.h>
 #endif
 
 namespace {
 
-using esp::execution::freertos::binary_semaphore;
+using esp::freertos::binary_semaphore;
 using namespace std::chrono_literals;
 
 void clear_notifications() {
@@ -177,10 +177,11 @@ TEST_CASE("aborting a FreeRTOS semaphore wait reports failure and leaves it usab
     REQUIRE_FALSE(semaphore.try_acquire());
 }
 
-#if CONFIG_IDF_TARGET_ESP32S3
+// This test's native GPTimer callback is not placed in IRAM.
+#if CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_GPTIMER_ISR_CACHE_SAFE
 namespace {
 
-using esp::execution::freertos::isr_release_result;
+using esp::freertos::isr_release_result;
 
 enum class isr_scenario : uint8_t { empty, full, waiting_task };
 

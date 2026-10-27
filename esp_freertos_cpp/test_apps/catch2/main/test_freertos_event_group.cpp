@@ -8,15 +8,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "esp_execution/freertos/event_group.hpp"
-#include "esp_execution/freertos/semaphore.hpp"
+#include "esp_freertos_cpp/event_group.hpp"
+#include "esp_freertos_cpp/semaphore.hpp"
 
 namespace {
 
-using esp::execution::freertos::binary_semaphore;
-using esp::execution::freertos::clear_on_exit;
-using esp::execution::freertos::event_group;
-using esp::execution::freertos::tick_duration;
+using esp::freertos::binary_semaphore;
+using esp::freertos::clear_on_exit;
+using esp::freertos::event_group;
+using esp::freertos::tick_duration;
 using namespace std::chrono_literals;
 
 constexpr EventBits_t first_bit = EventBits_t{1} << 0;

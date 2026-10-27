@@ -1,0 +1,15 @@
+dependencies:
+  idf:
+    version: ">=6.0"
+description: C++26 RAII wrappers and chrono adaptations for ESP-IDF FreeRTOS
+files:
+  use_gitignore: true
+license: Apache-2.0
+repository: https://github.com/euripedesrocha/esp_tinymlsys.git
+tags:
+  - esp-idf
+  - freertos
+  - raii
+  - cxx26
+url: https://github.com/euripedesrocha/esp_tinymlsys/tree/main/esp_freertos_cpp
+version: 0.1.0

@@ -1,10 +1,12 @@
+set(execution_sources "task_context.cpp")
+set(execution_dependencies freertos esp_freertos_cpp)
 idf_component_register(
     SRCS
-        "task_context.cpp"
+        ${execution_sources}
     INCLUDE_DIRS
         "include"
     REQUIRES
-        freertos
+        ${execution_dependencies}
 )
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_26)

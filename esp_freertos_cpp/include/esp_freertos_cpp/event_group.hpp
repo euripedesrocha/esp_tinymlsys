@@ -11,9 +11,9 @@
 #include <freertos/event_groups.h>
 #include <freertos/task.h>
 
-#include "esp_execution/freertos/chrono.hpp"
+#include "esp_freertos_cpp/chrono.hpp"
 
-namespace esp::execution::freertos {
+namespace esp::freertos {
 
 enum class clear_on_exit : uint8_t { preserve, clear };
 
@@ -102,4 +102,4 @@ private:
     EventGroupHandle_t handle_ = nullptr;
 };
 
-} // namespace esp::execution::freertos
+} // namespace esp::freertos

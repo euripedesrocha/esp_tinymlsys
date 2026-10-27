@@ -4,3 +4,6 @@ dependencies:
   esp_execution:
     version: "*"
     override_path: ../../..
+  esp_freertos_cpp:
+    version: "*"
+    override_path: ../../../../esp_freertos_cpp

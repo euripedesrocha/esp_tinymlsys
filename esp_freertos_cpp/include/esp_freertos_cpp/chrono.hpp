@@ -9,7 +9,7 @@
 
 #include <freertos/FreeRTOS.h>
 
-namespace esp::execution::freertos {
+namespace esp::freertos {
 
 using tick_duration = std::chrono::duration<std::int64_t, std::ratio<1, configTICK_RATE_HZ>>;
 
@@ -23,4 +23,4 @@ using tick_duration = std::chrono::duration<std::int64_t, std::ratio<1, configTI
     return static_cast<TickType_t>(count);
 }
 
-} // namespace esp::execution::freertos
+} // namespace esp::freertos

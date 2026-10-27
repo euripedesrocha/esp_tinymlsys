@@ -18,8 +18,8 @@
 #include "esp_execution.hpp"
 #include "esp_execution/enum_flags.hpp"
 #include "esp_execution/freertos/task_context.hpp"
-#include "esp_execution/freertos/event_group.hpp"
-#include "esp_execution/freertos/semaphore.hpp"
+#include "esp_freertos_cpp/event_group.hpp"
+#include "esp_freertos_cpp/semaphore.hpp"
 #include "freertos_task_test_support.hpp"
 
 namespace {
@@ -29,13 +29,13 @@ namespace execution_freertos = esp::execution::freertos;
 
 using execution_freertos::submission_policy;
 using namespace std::chrono_literals;
+using esp::freertos::binary_semaphore;
+using esp::freertos::clear_on_exit;
+using esp::freertos::event_group;
 using esp_execution_test::clear_notifications;
 using esp_execution_test::completion_record;
 using esp_execution_test::recording_receiver;
 using esp_execution_test::wait_for_notifications;
-using execution_freertos::binary_semaphore;
-using execution_freertos::clear_on_exit;
-using execution_freertos::event_group;
 using execution_freertos::schedule_error;
 using execution_freertos::task_context;
 

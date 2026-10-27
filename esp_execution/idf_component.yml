@@ -1,7 +1,8 @@
 dependencies:
   idf:
     version: ">=6.0"
-description: A pedagogical C++26 sender/receiver core for ESP-IDF
+  esp_freertos_cpp: "^0.1.0"
+description: C++26 execution vocabulary and FreeRTOS execution resources for ESP-IDF
 examples:
   - path: examples/basic
   - path: examples/blink

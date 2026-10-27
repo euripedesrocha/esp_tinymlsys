@@ -9,9 +9,9 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
-#include "esp_execution/freertos/chrono.hpp"
+#include "esp_freertos_cpp/chrono.hpp"
 
-namespace esp::execution::freertos {
+namespace esp::freertos {
 
 struct isr_release_result {
     bool released;
@@ -71,4 +71,4 @@ private:
     SemaphoreHandle_t handle_ = nullptr;
 };
 
-} // namespace esp::execution::freertos
+} // namespace esp::freertos

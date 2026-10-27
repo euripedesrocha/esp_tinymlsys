@@ -7,12 +7,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
-#include "esp_execution/freertos/chrono.hpp"
+#include "esp_freertos_cpp/chrono.hpp"
 
 namespace {
 
-using esp::execution::freertos::tick_duration;
-using esp::execution::freertos::to_ticks;
+using esp::freertos::tick_duration;
+using esp::freertos::to_ticks;
 using namespace std::chrono_literals;
 
 } // namespace

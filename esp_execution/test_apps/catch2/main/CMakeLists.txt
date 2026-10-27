@@ -1,7 +1,3 @@
-set(semaphore_test_dependencies)
-if(IDF_TARGET STREQUAL "esp32s3")
-    list(APPEND semaphore_test_dependencies esp_driver_gptimer)
-endif()
 idf_component_register(
     SRCS
         "test_main.cpp"
@@ -14,9 +10,6 @@ idf_component_register(
         "test_let_value.cpp"
         "test_scheduler.cpp"
         "test_continues_on.cpp"
-        "test_freertos_chrono.cpp"
-        "test_freertos_semaphore.cpp"
-        "test_freertos_event_group.cpp"
         "test_freertos_task_context.cpp"
         "test_freertos_task_context_integration.cpp"
     INCLUDE_DIRS
@@ -25,6 +18,6 @@ idf_component_register(
     PRIV_REQUIRES
         console
         esp_execution
+        esp_freertos_cpp
         freertos
-        ${semaphore_test_dependencies}
 )
