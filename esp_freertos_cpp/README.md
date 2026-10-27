@@ -11,6 +11,8 @@ component exports its C++26 and `-fcontracts` build requirements to consumers.
 | `esp_freertos_cpp/chrono.hpp`           | `tick_duration` and `to_ticks`              |
 | `esp_freertos_cpp/semaphore.hpp`        | `binary_semaphore` and `isr_release_result` |
 | `esp_freertos_cpp/event_group.hpp`      | `event_group` and `clear_on_exit`           |
+| `esp_freertos_cpp/critical_section.hpp` | `spinlock` for standard lock guards         |
+
 ## Ownership
 
 Semaphores and event groups own their native handles and release them at
@@ -60,3 +62,35 @@ durations upward so a positive timeout never becomes an immediate attempt.
 Nonpositive durations become zero ticks. The rounded count must be below
 `portMAX_DELAY`; exceeding that range violates a contract. Semaphore and
 event-group timed waits use this conversion.
+
+## Spinlock
+
+`spinlock` owns a native `portMUX_TYPE`. Its `lock()` and `unlock()` methods enter
+and exit a critical section. Use standard guards, for example:
+
+```cpp
+#include <mutex>
+#include "esp_freertos_cpp/critical_section.hpp"
+
+esp::freertos::spinlock mutex;
+int count = 0;
+
+void increment() {
+    std::lock_guard guard{mutex};
+    ++count;
+}
+```
+
+It supports `std::lock_guard`, the basic operations of `std::unique_lock`, and
+single-lock `std::scoped_lock`. Ports with nonblocking critical-section entry
+also expose `try_lock()`, supporting `std::try_to_lock` and multiple-lock
+`std::scoped_lock`. IDF's Linux port lacks that API, so `try_lock()` is unavailable
+there. Standard multi-lock algorithms may yield on contention; keep them out of
+ISRs. Keep critical sections short and do not block or yield while holding a
+spinlock. A spinlock is noncopyable and immovable, and initializes without
+allocating a native resource.
+
+`lock()` and `unlock()` select the native task or ISR critical-section API for
+the caller. Use from an ISR does not by itself guarantee operation while flash
+cache is disabled; code and data placement must also satisfy ESP-IDF's
+cache-safety requirements.
