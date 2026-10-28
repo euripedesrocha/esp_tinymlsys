@@ -135,7 +135,7 @@ public:
         : resource(requested_caps, upstream_resource, 1) {}
 
     [[nodiscard]] capabilities caps() const noexcept { return caps_; }
-    [[nodiscard]] std::size_t minimum_alignment() const noexcept { return min_alignment_; }
+    [[nodiscard]] std::size_t minimum_alignment() const;
 
 protected:
     resource(capabilities requested_caps, std::pmr::memory_resource* upstream_resource,

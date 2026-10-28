@@ -1,7 +1,7 @@
 dependencies:
   idf:
     version: ">=6.0"
-description: ESP-IDF polymorphic memory resources backed by heap capabilities
+description: ESP-IDF polymorphic memory resources and bounded buffer ownership
 documentation: https://github.com/euripedesrocha/esp-memory/tree/main/docs
 examples:
   - path: examples/memory_resource
@@ -15,6 +15,7 @@ tags:
   - allocator
   - pmr
   - memory
+  - buffer-pool
   - stl
   - dsp
 url: https://github.com/euripedesrocha/esp-memory

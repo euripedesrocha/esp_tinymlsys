@@ -2,10 +2,14 @@ idf_component_register(
     SRCS
         "test_main.cpp"
         "test_resource.cpp"
+        "test_buffer.cpp"
     INCLUDE_DIRS
         "."
     WHOLE_ARCHIVE
     PRIV_REQUIRES
         console
         esp_psram
+        esp_mm
+        esp_hw_support
+        pthread
 )

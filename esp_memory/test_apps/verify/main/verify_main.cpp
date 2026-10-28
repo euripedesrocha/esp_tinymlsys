@@ -1,6 +1,7 @@
 #include <memory_resource>
 #include <vector>
 
+#include "esp_memory_block_pool_resource.hpp"
 #include "esp_memory_resource.hpp"
 
 extern "C" void app_main(void) {
