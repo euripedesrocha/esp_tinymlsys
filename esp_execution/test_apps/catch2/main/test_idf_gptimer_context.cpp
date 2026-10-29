@@ -32,6 +32,8 @@ struct completion {
     std::atomic_int values = 0;
     std::atomic_int errors = 0;
     std::atomic_bool from_isr = false;
+    std::atomic_bool start_returned = false;
+    std::atomic_bool returned_before_completion = false;
     std::atomic<std::int64_t> completed_at = 0;
 };
 
@@ -42,6 +44,7 @@ struct receiver {
     void set_value() && noexcept {
         result.completed_at.store(esp_timer_get_time());
         result.from_isr.store(xPortInIsrContext());
+        result.returned_before_completion.store(result.start_returned.load());
         result.values.fetch_add(1);
         notify_completion(result.done);
     }
@@ -59,7 +62,9 @@ struct receiver {
 };
 } // namespace
 
-TEST_CASE("GPTimer scheduling is lazy and completes in the ISR", "[idf][gptimer][scheduler]") {
+TEST_CASE("GPTimer scheduling is lazy, starts before its alarm, and completes once in the ISR",
+          "[idf][gptimer][scheduler]") {
+    constexpr auto delay = 20ms;
     binary_semaphore done;
     completion result{.done = done};
     gptimer_context context{{.clk_src = GPTIMER_CLK_SRC_DEFAULT,
@@ -69,7 +74,7 @@ TEST_CASE("GPTimer scheduling is lazy and completes in the ISR", "[idf][gptimer]
                              .flags = {}}};
     const auto scheduler = context.get_scheduler();
     STATIC_REQUIRE(execution::scheduler<decltype(scheduler)>);
-    auto work = schedule_after(scheduler, 1ms);
+    auto work = schedule_after(scheduler, delay);
     REQUIRE(execution::get_completion_scheduler<execution::set_value_t>(execution::get_env(work)) ==
             scheduler);
     auto operation = execution::connect(work, receiver{result});
@@ -78,11 +83,17 @@ TEST_CASE("GPTimer scheduling is lazy and completes in the ISR", "[idf][gptimer]
     REQUIRE(result.errors.load() == 0);
     const auto started = esp_timer_get_time();
     execution::start(operation);
+    result.start_returned.store(true);
     wait_for_completion(done);
-    REQUIRE(esp_timer_get_time() - started >= 1000);
+    REQUIRE(result.returned_before_completion.load());
+    REQUIRE(result.completed_at.load() - started >=
+            std::chrono::duration_cast<std::chrono::microseconds>(delay).count());
     REQUIRE(result.values.load() == 1);
     REQUIRE(result.errors.load() == 0);
     REQUIRE(result.from_isr.load());
+    REQUIRE_FALSE(done.try_acquire_for(30ms));
+    REQUIRE(result.values.load() == 1);
+    REQUIRE(result.errors.load() == 0);
 }
 
 TEST_CASE("GPTimer immediate and successive schedules use the same context",
