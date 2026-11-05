@@ -3,59 +3,57 @@
 
 #pragma once
 
-#include <type_traits>
+#include <algorithm>
+#include <concepts>
+#include <initializer_list>
+#include <meta>
+#include <utility>
+#include <vector>
 
 namespace esp::execution::detail {
 
 template <class... Types> struct type_list {};
 
-template <class List, class Type> struct append_type;
-template <template <class...> class List, class... Types, class Type>
-struct append_type<List<Types...>, Type> {
-    using type = List<Types..., Type>;
+consteval auto fold_types(std::meta::info list, auto initial,
+                          std::invocable<decltype(initial), std::meta::info> auto operation) {
+    return std::ranges::fold_left(std::meta::template_arguments_of(std::meta::dealias(list)),
+                                  std::move(initial), std::move(operation));
+}
+
+inline constexpr auto append = [](std::vector<std::meta::info> result, std::meta::info type) {
+    result.push_back(type);
+    return result;
 };
 
-template <class List, class Type> struct append_unique_type;
-template <template <class...> class List, class... Types, class Type>
-struct append_unique_type<List<Types...>, Type> {
-    using type = std::conditional_t<(std::is_same_v<Type, Types> || ...), List<Types...>,
-                                    List<Types..., Type>>;
+inline constexpr auto append_unique = [](std::vector<std::meta::info> result,
+                                         std::meta::info type) {
+    if (std::ranges::find(result, type) == result.end()) {
+        result.push_back(type);
+    }
+    return result;
 };
 
-template <class State, template <class, class> class Operation, class... Inputs> struct fold_left;
+consteval auto concatenate_type_lists(std::meta::info target,
+                                      std::initializer_list<std::meta::info> lists)
+    -> std::meta::info {
+    std::vector<std::meta::info> arguments;
+    for (auto list : lists) {
+        arguments = fold_types(list, std::move(arguments), append);
+    }
+    return std::meta::substitute(target, arguments);
+}
 
-template <class State, template <class, class> class Operation> struct fold_left<State, Operation> {
-    using type = State;
-};
-
-template <class State, template <class, class> class Operation, class First, class... Rest>
-struct fold_left<State, Operation, First, Rest...>
-    : fold_left<typename Operation<State, First>::type, Operation, Rest...> {};
-
-template <class State, template <class, class> class Operation, class... Inputs>
-using fold_left_t = typename fold_left<State, Operation, Inputs...>::type;
-
-template <class State, template <class, class> class Operation, class... Lists>
-struct fold_left_lists;
-
-template <class State, template <class, class> class Operation>
-struct fold_left_lists<State, Operation> {
-    using type = State;
-};
-
-template <class State, template <class, class> class Operation, template <class...> class List,
-          class... Elements, class... Rest>
-struct fold_left_lists<State, Operation, List<Elements...>, Rest...>
-    : fold_left_lists<fold_left_t<State, Operation, Elements...>, Operation, Rest...> {};
-
-template <class State, template <class, class> class Operation, class... Lists>
-using fold_left_lists_t = typename fold_left_lists<State, Operation, Lists...>::type;
+consteval auto deduplicate_type_list(std::meta::info list) -> std::meta::info {
+    list = std::meta::dealias(list);
+    return std::meta::substitute(std::meta::template_of(list),
+                                 fold_types(list, std::vector<std::meta::info>{}, append_unique));
+}
 
 template <class... Lists>
-using type_list_cat_t = fold_left_lists_t<type_list<>, append_type, Lists...>;
+using type_list_cat_t = [:concatenate_type_lists(^^type_list, {
+                                                                  ^^Lists...}):];
 
-template <class... Types>
-using unique_types_t = fold_left_t<type_list<>, append_unique_type, Types...>;
+template <class... Types> using unique_types_t = [:deduplicate_type_list(^^type_list<Types...>):];
 
 // Bind the argument pack before applying a possibly fixed-arity alias.
 template <class... Arguments> struct meta_arguments {

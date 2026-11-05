@@ -495,6 +495,30 @@ TEST_CASE("connections copy lvalue receivers and complete the owned copy", "[con
     REQUIRE(replacement.completions() == 0);
 }
 
+TEST_CASE("reflected type lists concatenate and deduplicate without reordering",
+          "[signatures][meta]") {
+    using alias = int;
+    using function = void(int&);
+    using first = detail::type_list<alias, const int, int&, function>;
+    using second = std::tuple<function, long, int&, int>;
+    STATIC_REQUIRE(std::same_as<detail::type_list_cat_t<>, detail::type_list<>>);
+    STATIC_REQUIRE(std::same_as<detail::unique_types_t<>, detail::type_list<>>);
+    STATIC_REQUIRE(
+        std::same_as<detail::type_list_cat_t<detail::type_list<>, first, second>,
+                     detail::type_list<int, const int, int&, function, function, long, int&, int>>);
+    STATIC_REQUIRE(
+        std::same_as<
+            detail::unique_types_t<alias, const int, int&, function, function, long, int&, int>,
+            detail::type_list<int, const int, int&, function, long>>);
+    using merged = detail::completion_signatures_cat_t<
+        completion_signatures<set_error_t(long), set_value_t(int&)>, completion_signatures<>,
+        completion_signatures<set_value_t(int&), set_stopped_t(), set_error_t(long)>>;
+    STATIC_REQUIRE(
+        std::same_as<merged,
+                     completion_signatures<set_error_t(long), set_value_t(int&), set_stopped_t()>>);
+    STATIC_REQUIRE(std::same_as<detail::completion_signatures_cat_t<>, completion_signatures<>>);
+}
+
 TEST_CASE("completion signatures describe sender outcomes", "[signatures]") {
     using one_signatures = completion_signatures_of_t<one_sender>;
     using error_signatures = completion_signatures_of_t<error_sender>;

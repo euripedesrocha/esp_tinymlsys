@@ -91,8 +91,9 @@ inline constexpr bool all_selected_completion_signatures_satisfy_v =
     }>;
 
 template <class... SignaturesList>
-using completion_signatures_cat_t =
-    fold_left_lists_t<completion_signatures<>, append_unique_type, SignaturesList...>;
+using completion_signatures_cat_t = [:deduplicate_type_list(concatenate_type_lists(
+                                          ^^completion_signatures, {
+                                                                       ^^SignaturesList...})):];
 
 // Transform.operator()<Tag, Arguments...>() supplies a signature-list type carrier.
 // Concatenate those lists, retaining only the first occurrence of each signature.

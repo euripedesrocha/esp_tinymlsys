@@ -23,4 +23,5 @@ idf_component_register(
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_26)
 target_compile_options(${COMPONENT_LIB} PUBLIC
     $<$<COMPILE_LANGUAGE:CXX>:-fcontracts>
+    $<$<COMPILE_LANGUAGE:CXX>:-freflection>
 )
