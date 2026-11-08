@@ -91,16 +91,18 @@ concept compatible =
     count_completion_signatures_v<completion_signatures_of_t<Sender, Environment>, set_value_t> !=
         0;
 
+template <class Control>
+concept repetition_control = movable_value<Control> && requires(const Control& control) {
+    typename std::bool_constant<Control::can_complete>;
+    { control.complete_before_start() } noexcept -> std::same_as<bool>;
+};
+
 template <class Control, class Sender, class Environment = empty_env>
 concept control_for =
-    sender_in<Sender, Environment> && std::move_constructible<Control> &&
-    requires(const Control& control) {
-        typename std::bool_constant<Control::can_complete>;
-        { control.complete_before_start() } noexcept -> std::same_as<bool>;
-    } &&
+    sender_in<Sender, Environment> && repetition_control<Control> &&
     all_selected_completion_signatures_satisfy_v<completion_signatures_of_t<Sender, Environment>,
                                                  set_value_t, []<class... Arguments> {
-                                                     return requires(Control & control) {
+                                                     return requires(Control& control) {
                                                          {
                                                              control.complete_after_value(
                                                                  std::declval<Arguments>()...)
@@ -111,11 +113,6 @@ concept control_for =
 template <class Sender, class Control, class Environment = empty_env>
 concept repeat_compatible =
     compatible<Sender, Environment> && control_for<Control, Sender, Environment>;
-
-// The sender's class constraint has already validated empty_env.
-template <class Environment, class Sender, class Control>
-concept compatible_environment =
-    std::same_as<Environment, empty_env> || repeat_compatible<Sender, Control, Environment>;
 
 template <class Signature> inline constexpr std::size_t error_storage_size_v = 1;
 
@@ -257,13 +254,12 @@ private:
     Predicate predicate_;
 };
 
-template <class Sender, class Control>
-    requires repeat_compatible<Sender, Control>
-class sender {
+template <execution::sender Sender, repetition_control Control> class sender {
 public:
     using sender_concept = sender_tag;
 
-    template <compatible_environment<Sender, Control> Environment>
+    template <class Environment>
+        requires repeat_compatible<Sender, Control, Environment>
     using completion_signatures = completion_signatures_cat_t<
         std::conditional_t<Control::can_complete, execution::completion_signatures<set_value_t()>,
                            execution::completion_signatures<>>,

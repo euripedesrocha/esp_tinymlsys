@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "esp_execution.hpp"
+#include "esp_execution_test/execution.hpp"
 
 namespace {
 
@@ -66,12 +67,14 @@ struct stopped_handler {
 };
 template <class Sender, class Callable>
 concept can_upon_error = requires(Sender&& sender, Callable&& callable) {
-    execution::upon_error(std::forward<Sender>(sender), std::forward<Callable>(callable));
+    requires execution::sender_in<decltype(execution::upon_error(
+        std::forward<Sender>(sender), std::forward<Callable>(callable)))>;
 };
 
 template <class Sender, class Callable>
 concept can_upon_stopped = requires(Sender&& sender, Callable&& callable) {
-    execution::upon_stopped(std::forward<Sender>(sender), std::forward<Callable>(callable));
+    requires execution::sender_in<decltype(execution::upon_stopped(
+        std::forward<Sender>(sender), std::forward<Callable>(callable)))>;
 };
 
 struct continuation_test_env {};
@@ -163,6 +166,30 @@ template <class Tag> void check_receiver_environment(auto adaptor) {
 
     result completion;
     auto work = adaptor(source{}, environment_handler{});
+    SECTION("rvalue connection") {
+        auto operation = execution::connect(std::move(work), receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    SECTION("const lvalue connection") {
+        auto operation = execution::connect(std::as_const(work), receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    REQUIRE(completion.values == 1);
+    REQUIRE(completion.value == 42);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
+}
+
+void check_environment_only_composition(execution::sender auto work) {
+    using sender = decltype(work);
+    using receiver = environment_receiver<continuation_test_env>;
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender>);
+    STATIC_REQUIRE(execution::sender_in<sender, continuation_test_env>);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender, unavailable_env>);
+    STATIC_REQUIRE_FALSE(can_connect<sender, result_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<const sender&, environment_receiver<unavailable_env>>);
+
+    result completion;
     SECTION("rvalue connection") {
         auto operation = execution::connect(std::move(work), receiver{{.state = &completion}});
         execution::start(operation);
@@ -292,4 +319,39 @@ TEST_CASE("upon_error validates its callable against the receiver environment",
 TEST_CASE("upon_stopped validates its callable against the receiver environment",
           "[upon_stopped][environment]") {
     check_receiver_environment<execution::set_stopped_t>(execution::upon_stopped);
+}
+
+TEST_CASE("then assembles before its required receiver environment is available",
+          "[then][environment]") {
+    using source = environment_dependent_sender<execution::set_value_t>;
+    SECTION("predecessor has no signatures in empty_env") {
+        using gated = esp_execution_test::environment_only_sender<source, continuation_test_env>;
+        check_environment_only_composition(execution::then(gated{source{}}, environment_handler{}));
+    }
+    SECTION("callable accepts only the receiver environment's value shape") {
+        check_environment_only_composition(
+            execution::then(source{}, [](std::same_as<long> auto) noexcept { return 42; }));
+    }
+}
+
+TEST_CASE("upon_error assembles before its required receiver environment is available",
+          "[upon_error][environment]") {
+    using source = environment_dependent_sender<execution::set_error_t>;
+    SECTION("predecessor has no signatures in empty_env") {
+        using gated = esp_execution_test::environment_only_sender<source, continuation_test_env>;
+        check_environment_only_composition(
+            execution::upon_error(gated{source{}}, environment_handler{}));
+    }
+    SECTION("callable accepts only the receiver environment's error shape") {
+        check_environment_only_composition(
+            execution::upon_error(source{}, [](std::same_as<long> auto) noexcept { return 42; }));
+    }
+}
+
+TEST_CASE("upon_stopped assembles before its required receiver environment is available",
+          "[upon_stopped][environment]") {
+    using source = environment_dependent_sender<execution::set_stopped_t>;
+    using gated = esp_execution_test::environment_only_sender<source, continuation_test_env>;
+    check_environment_only_composition(
+        execution::upon_stopped(gated{source{}}, environment_handler{}));
 }

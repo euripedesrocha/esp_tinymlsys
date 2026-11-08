@@ -74,6 +74,10 @@ struct reference_test_env {
     int value;
 };
 
+struct environment_receiver : result_receiver {
+    auto get_env() const noexcept { return reference_test_env{42}; }
+};
+
 struct reference_test_sender {
     using sender_concept = execution::sender_tag;
 
@@ -209,11 +213,14 @@ struct error_destroying_receiver : destroying_receiver {
 };
 
 template <class Sender>
-concept can_repeat = requires(Sender&& sender) { execution::repeat(std::forward<Sender>(sender)); };
+concept can_repeat = requires(Sender&& sender) {
+    requires execution::sender_in<decltype(execution::repeat(std::forward<Sender>(sender)))>;
+};
 
-template <class Sender, class Control>
-concept can_form_repeat_sender =
-    requires { typename execution::detail::repeat::sender<Sender, Control>; };
+template <class Sender, class Receiver>
+concept can_connect = requires(Sender&& sender, Receiver&& receiver) {
+    execution::connect(std::forward<Sender>(sender), std::forward<Receiver>(receiver));
+};
 
 template <class Storage, class Error>
 concept can_store_error =
@@ -255,6 +262,37 @@ TEST_CASE("repeat's sender reference requires a valid lvalue member connection",
     STATIC_REQUIRE_FALSE(can_connect_reference<reference_test_sender, result_receiver&>);
     STATIC_REQUIRE_FALSE(can_connect_reference<rvalue_only_sender, result_receiver>);
     STATIC_REQUIRE_FALSE(can_connect_reference<invalid_reference_sender, result_receiver>);
+}
+
+TEST_CASE("repeat assembles without predecessor signatures in empty_env", "[repeat][environment]") {
+    const auto terminal = GENERATE(terminate_as::error, terminate_as::stopped);
+    int starts = 0;
+    auto source = iteration_sender{
+        .iterations_started = &starts, .iterations_before_terminal = 3, .terminal = terminal};
+    auto work =
+        execution::repeat(environment_only_sender<decltype(source), reference_test_env>{source});
+    using sender = decltype(work);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender>);
+    STATIC_REQUIRE(execution::sender_in<sender, reference_test_env>);
+    STATIC_REQUIRE_FALSE(can_connect<sender, result_receiver>);
+
+    result completion;
+    SECTION("rvalue connection") {
+        auto operation =
+            execution::connect(std::move(work), environment_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    SECTION("const lvalue connection") {
+        auto operation =
+            execution::connect(std::as_const(work), environment_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    REQUIRE(starts == 4);
+    REQUIRE(completion.values == 0);
+    REQUIRE(completion.errors == (terminal == terminate_as::error ? 1 : 0));
+    REQUIRE(completion.stopped == (terminal == terminate_as::stopped ? 1 : 0));
+    if (terminal == terminate_as::error)
+        REQUIRE(completion.error == 4);
 }
 
 TEST_CASE("repeat reconnects a move-only predecessor until its terminal completion",
@@ -412,25 +450,6 @@ TEST_CASE("pending error accepts only declared and nonthrowing error arguments",
     STATIC_REQUIRE(can_store_error<storage, throwing_copy_error>);
     STATIC_REQUIRE_FALSE(can_store_error<storage, throwing_copy_error&>);
     STATIC_REQUIRE_FALSE(can_store_error<storage, short>);
-}
-
-TEST_CASE("repeat establishes source and control requirements as class invariants",
-          "[repeat][constraints]") {
-    struct error_only_receiver {
-        using receiver_concept = execution::receiver_tag;
-        void set_error(int) && noexcept {}
-    };
-    using namespace execution::detail::repeat;
-    STATIC_REQUIRE(can_form_repeat_sender<decltype(execution::just()), forever_control>);
-    STATIC_REQUIRE(can_form_repeat_sender<decltype(execution::just()), count_control>);
-    STATIC_REQUIRE_FALSE(can_form_repeat_sender<rvalue_only_sender, forever_control>);
-    STATIC_REQUIRE_FALSE(
-        can_form_repeat_sender<decltype(execution::just_error(7)), forever_control>);
-    STATIC_REQUIRE_FALSE(can_form_repeat_sender<reference_error_sender, forever_control>);
-    STATIC_REQUIRE_FALSE(can_form_repeat_sender<decltype(execution::just()), int>);
-
-    using finite = decltype(execution::repeat_n(execution::just(), 1));
-    STATIC_REQUIRE_FALSE(execution::detail::receiver_for_sender<error_only_receiver, finite>);
 }
 
 TEST_CASE("pending error destroys its owned error", "[repeat][error][lifecycle]") {

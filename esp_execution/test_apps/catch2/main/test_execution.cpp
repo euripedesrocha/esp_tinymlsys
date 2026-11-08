@@ -303,7 +303,8 @@ using move_only_then_sender =
 
 template <class Sender, class Callable>
 concept can_then = requires(Sender&& sender, Callable&& callable) {
-    then(std::forward<Sender>(sender), std::forward<Callable>(callable));
+    requires sender_in<decltype(then(std::forward<Sender>(sender),
+                                     std::forward<Callable>(callable)))>;
 };
 
 template <class... Values>
@@ -458,17 +459,7 @@ TEST_CASE("sender storage types establish their structural invariants", "[concep
     STATIC_REQUIRE_FALSE(can_form_type<detail::sender_adaptor_binding, copy_only_value>);
 }
 
-TEST_CASE("continuation compatibility is a sender class invariant", "[then][concepts]") {
-    STATIC_REQUIRE(
-        can_form_type<detail::continuation_sender, set_value_t, one_sender, increment_callable>);
-    STATIC_REQUIRE_FALSE(
-        can_form_type<detail::continuation_sender, set_value_t, one_sender, noninvocable_callable>);
-    STATIC_REQUIRE_FALSE(
-        can_form_type<detail::continuation_sender, set_value_t, one_sender, throwing_callable>);
-    STATIC_REQUIRE_FALSE(
-        can_form_type<detail::continuation_sender, set_value_t, int, increment_callable>);
-    STATIC_REQUIRE(can_form_type<detail::continuation_sender, set_value_t, error_sender,
-                                 noninvocable_callable>);
+TEST_CASE("then checks receiver compatibility at connection", "[then][concepts]") {
     using work = decltype(then(std::declval<one_sender>(), increment_callable{}));
     STATIC_REQUIRE(can_connect<work, probe_receiver&>);
     STATIC_REQUIRE_FALSE(can_connect<work, memberless_receiver>);
@@ -723,6 +714,8 @@ TEST_CASE("then transforms every advertised value signature", "[then][signatures
     STATIC_REQUIRE(std::same_as<completion_signatures_of_t<stopped_then_sender>,
                                 completion_signatures<set_stopped_t()>>);
     STATIC_REQUIRE(can_then<multi_signature_sender, multi_signature_callable>);
+    STATIC_REQUIRE_FALSE(can_then<int, increment_callable>);
+    STATIC_REQUIRE_FALSE(can_then<one_sender, noninvocable_callable>);
     STATIC_REQUIRE_FALSE(can_then<multi_signature_sender, increment_callable>);
     STATIC_REQUIRE_FALSE(can_then<one_sender, throwing_callable>);
 }

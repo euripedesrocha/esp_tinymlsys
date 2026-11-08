@@ -14,9 +14,15 @@ namespace {
 
 using namespace esp_execution_test;
 
+struct repeat_n_test_env {};
+struct environment_receiver : result_receiver {
+    auto get_env() const noexcept { return repeat_n_test_env{}; }
+};
+
 template <class Sender>
-concept can_repeat_n =
-    requires(Sender&& sender) { execution::repeat_n(std::forward<Sender>(sender), 1); };
+concept can_repeat_n = requires(Sender&& sender) {
+    requires execution::sender_in<decltype(execution::repeat_n(std::forward<Sender>(sender), 1))>;
+};
 
 template <class Sender>
 concept can_connect_to_result = requires(Sender&& sender) {
@@ -57,6 +63,15 @@ TEST_CASE("repeat_n requires a reusable sender with value completions", "[repeat
     STATIC_REQUIRE_FALSE(can_repeat_n<rvalue_only_sender>);
 }
 
+TEST_CASE("repeat_n rejects receivers missing its value completion", "[repeat_n][constraints]") {
+    struct error_only_receiver {
+        using receiver_concept = execution::receiver_tag;
+        void set_error(int) && noexcept {}
+    };
+    using finite = decltype(execution::repeat_n(execution::just(), 1));
+    STATIC_REQUIRE_FALSE(std::invocable<decltype(execution::connect), finite, error_only_receiver>);
+}
+
 TEST_CASE("repeat_n needs only its advertised value handler", "[repeat_n][signatures]") {
     const auto count = GENERATE(0, 1, 3);
     int completions = 0;
@@ -66,6 +81,37 @@ TEST_CASE("repeat_n needs only its advertised value handler", "[repeat_n][signat
     auto operation = execution::connect(work, value_only_receiver{.completions = &completions});
     execution::start(operation);
     REQUIRE(completions == 1);
+}
+
+TEST_CASE("repeat_n assembles without predecessor signatures in empty_env",
+          "[repeat_n][environment]") {
+    const int count = GENERATE(0, 3);
+    int starts = 0;
+    auto source = iteration_sender{.iterations_started = &starts,
+                                   .iterations_before_terminal = 5,
+                                   .terminal = terminate_as::error};
+    auto work = execution::repeat_n(
+        environment_only_sender<decltype(source), repeat_n_test_env>{source}, count);
+    using sender = decltype(work);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender>);
+    STATIC_REQUIRE(execution::sender_in<sender, repeat_n_test_env>);
+    STATIC_REQUIRE_FALSE(can_connect_to_result<sender>);
+
+    result completion;
+    SECTION("rvalue connection") {
+        auto operation =
+            execution::connect(std::move(work), environment_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    SECTION("const lvalue connection") {
+        auto operation =
+            execution::connect(std::as_const(work), environment_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    REQUIRE(starts == count);
+    REQUIRE(completion.values == 1);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
 }
 
 TEST_CASE("repeat_n completes from cross-thread values while its receiver destroys the operation",

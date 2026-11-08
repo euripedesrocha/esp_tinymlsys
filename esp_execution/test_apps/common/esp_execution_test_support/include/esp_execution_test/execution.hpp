@@ -24,6 +24,29 @@ namespace esp_execution_test {
 
 namespace execution = esp::execution;
 
+// A sender whose signatures and connections require a receiver environment.
+// Its attributes deliberately do not supply that environment during assembly.
+template <execution::sender Source, class RequiredEnv> struct environment_only_sender {
+    using sender_concept = execution::sender_tag;
+    Source source;
+
+    template <class Env>
+        requires std::same_as<Env, RequiredEnv> && execution::sender_in<Source, Env>
+    using completion_signatures = execution::completion_signatures_of_t<Source, Env>;
+
+    decltype(auto) get_env() const noexcept { return execution::get_env(source); }
+
+    auto
+    connect(execution::detail::receiver_for_sender<environment_only_sender> auto receiver) const&
+        requires std::copy_constructible<Source>
+    {
+        return execution::connect(source, std::move(receiver));
+    }
+    auto connect(execution::detail::receiver_for_sender<environment_only_sender> auto receiver) && {
+        return execution::connect(std::move(source), std::move(receiver));
+    }
+};
+
 struct value_only_receiver {
     using receiver_concept = execution::receiver_tag;
     int* completions;

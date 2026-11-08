@@ -37,11 +37,6 @@ concept continuation_for =
         completion_signatures_of_t<Sender, Env>, SelectedTag,
         []<class... Arguments> { return std::is_nothrow_invocable_v<Callable&&, Arguments...>; }>;
 
-// The sender's class constraint has already validated empty_env.
-template <class Env, class Sender, class SelectedTag, class Callable>
-concept compatible_environment =
-    std::same_as<Env, empty_env> || continuation_for<Sender, SelectedTag, Callable, Env>;
-
 template <class CompletionFunctionTag, class Receiver, class Callable> class continuation_receiver {
 public:
     using receiver_concept = receiver_tag;
@@ -86,13 +81,13 @@ private:
     Callable callable_;
 };
 
-template <class SelectedTag, class Sender, movable_value Callable>
-    requires continuation_for<Sender, SelectedTag, Callable>
+template <class SelectedTag, execution::sender Sender, movable_value Callable>
 class continuation_sender {
 public:
     using sender_concept = sender_tag;
 
-    template <compatible_environment<Sender, SelectedTag, Callable> Env>
+    template <class Env>
+        requires continuation_for<Sender, SelectedTag, Callable, Env>
     using completion_signatures = map_completion_signatures_t<
         completion_signatures_of_t<Sender, Env>, []<class Tag, class... Arguments> {
             if constexpr (std::same_as<Tag, SelectedTag>) {

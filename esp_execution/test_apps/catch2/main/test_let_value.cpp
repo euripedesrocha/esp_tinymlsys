@@ -26,12 +26,9 @@ struct value_destroying_receiver : destroying_receiver {
 
 template <class Source, class Callable>
 concept can_let_value = requires(Source&& source, Callable&& callable) {
-    execution::let_value(std::forward<Source>(source), std::forward<Callable>(callable));
+    requires execution::sender_in<decltype(execution::let_value(std::forward<Source>(source),
+                                                                std::forward<Callable>(callable)))>;
 };
-
-template <class Source, class Callable>
-concept can_form_sender =
-    requires { typename execution::detail::let_value::sender<Source, Callable>; };
 
 template <class Sender, class Receiver>
 concept can_connect = requires(Sender&& source, Receiver&& receiver) {
@@ -139,6 +136,28 @@ template <class Env> struct environment_receiver {
     Env get_env() const noexcept { return {}; }
     void set_value(int first, int second) && noexcept { *value = first + second; }
 };
+
+void check_environment_only_composition(execution::sender auto work) {
+    using sender = decltype(work);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender>);
+    STATIC_REQUIRE(execution::sender_in<sender, alternate_env>);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender, unsupported_source_env>);
+    STATIC_REQUIRE_FALSE(can_connect<sender, result_receiver>);
+    STATIC_REQUIRE_FALSE(can_connect<const sender&, environment_receiver<unsupported_source_env>>);
+
+    int value = 0;
+    SECTION("rvalue connection") {
+        auto operation = execution::connect(std::move(work),
+                                            environment_receiver<alternate_env>{.value = &value});
+        execution::start(operation);
+    }
+    SECTION("const lvalue connection") {
+        auto operation = execution::connect(std::as_const(work),
+                                            environment_receiver<alternate_env>{.value = &value});
+        execution::start(operation);
+    }
+    REQUIRE(value == 42);
+}
 
 enum class input_kind { value, const_reference };
 
@@ -373,25 +392,37 @@ TEST_CASE("let_value rejects invalid callables without hard substitution errors"
                                        decltype(accepts_any)>);
 }
 
-TEST_CASE("let_value establishes compatibility as a sender class invariant",
-          "[let_value][constraints]") {
+TEST_CASE("let_value checks receiver compatibility at connection", "[let_value][constraints]") {
     using source = decltype(execution::just(42));
     auto valid = [](int& value) noexcept { return execution::just(value); };
-    auto throwing = [](int&) { return execution::just(); };
-    auto not_a_sender = [](int&) noexcept { return 42; };
-    STATIC_REQUIRE(can_form_sender<source, decltype(valid)>);
-    STATIC_REQUIRE_FALSE(can_form_sender<int, decltype(valid)>);
-    STATIC_REQUIRE_FALSE(can_form_sender<source, noninvocable_callable>);
-    STATIC_REQUIRE_FALSE(can_form_sender<source, decltype(throwing)>);
-    STATIC_REQUIRE_FALSE(can_form_sender<source, decltype(not_a_sender)>);
-    STATIC_REQUIRE_FALSE(can_form_sender<source, copy_only_callable>);
-    STATIC_REQUIRE_FALSE(can_form_sender<multi_value_sender, decltype(valid)>);
-    STATIC_REQUIRE(can_form_sender<decltype(execution::just_error(1)), noninvocable_callable>);
     using work = decltype(execution::let_value(std::declval<source>(), valid));
     STATIC_REQUIRE(can_connect<work, result_receiver>);
     STATIC_REQUIRE(can_connect<const work&, result_receiver>);
     STATIC_REQUIRE_FALSE(can_connect<work, error_only_receiver>);
     STATIC_REQUIRE_FALSE(can_connect<const work&, error_only_receiver>);
+}
+
+TEST_CASE("let_value assembles before its required receiver environment is available",
+          "[let_value][environment]") {
+    SECTION("predecessor has no signatures in empty_env") {
+        auto source = execution::just(20, 22);
+        check_environment_only_composition(execution::let_value(
+            environment_only_sender<decltype(source), alternate_env>{std::move(source)},
+            environment_callable{}));
+    }
+    SECTION("dependent sender has no signatures in empty_env") {
+        check_environment_only_composition(
+            execution::let_value(execution::just(42), [](int& value) noexcept {
+                auto child = execution::just(value - 1, 1);
+                return environment_only_sender<decltype(child), alternate_env>{std::move(child)};
+            }));
+    }
+    SECTION("callable accepts only the receiver environment's value shape") {
+        alternate_env environment;
+        check_environment_only_composition(execution::let_value(
+            environment_source{.environment = &environment},
+            [](int& first, int& second) noexcept { return environment_child{first + second}; }));
+    }
 }
 
 TEST_CASE("let_value validates every branch against the receiver environment",

@@ -95,7 +95,8 @@ struct throwing_predicate {
 
 template <class Sender, class Predicate>
 concept can_repeat_until = requires(Sender&& sender, Predicate&& predicate) {
-    execution::repeat_until(std::forward<Sender>(sender), std::forward<Predicate>(predicate));
+    requires execution::sender_in<decltype(execution::repeat_until(
+        std::forward<Sender>(sender), std::forward<Predicate>(predicate)))>;
 };
 
 template <class Sender, class Receiver>
@@ -155,6 +156,37 @@ TEST_CASE("repeat_until validates its predicate against the receiver environment
     auto operation =
         execution::connect(std::move(work), repeat_test_env_receiver{{.state = &completion}});
     execution::start(operation);
+    REQUIRE(completion.values == 1);
+    REQUIRE(completion.errors == 0);
+    REQUIRE(completion.stopped == 0);
+}
+
+TEST_CASE("repeat_until assembles without predecessor signatures in empty_env",
+          "[repeat_until][environment]") {
+    int starts = 0;
+    auto source = numbered_iteration_sender{.iterations_started = &starts,
+                                            .iterations_before_terminal = 5,
+                                            .terminal = terminate_as::error};
+    auto work =
+        execution::repeat_until(environment_only_sender<decltype(source), repeat_test_env>{source},
+                                [](int value) noexcept { return value == 3; });
+    using sender = decltype(work);
+    STATIC_REQUIRE_FALSE(execution::sender_in<sender>);
+    STATIC_REQUIRE(execution::sender_in<sender, repeat_test_env>);
+    STATIC_REQUIRE_FALSE(can_connect<sender, result_receiver>);
+
+    result completion;
+    SECTION("rvalue connection") {
+        auto operation =
+            execution::connect(std::move(work), repeat_test_env_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    SECTION("const lvalue connection") {
+        auto operation = execution::connect(std::as_const(work),
+                                            repeat_test_env_receiver{{.state = &completion}});
+        execution::start(operation);
+    }
+    REQUIRE(starts == 3);
     REQUIRE(completion.values == 1);
     REQUIRE(completion.errors == 0);
     REQUIRE(completion.stopped == 0);
