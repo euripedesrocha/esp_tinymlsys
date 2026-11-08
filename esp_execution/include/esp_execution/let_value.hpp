@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <exception>
 #include <functional>
 #include <tuple>
 #include <type_traits>
@@ -28,14 +29,23 @@ concept let_value_compatible =
     sender_in<Sender, Env> &&
     all_selected_completion_signatures_satisfy_v<
         completion_signatures_of_t<Sender, Env>, set_value_t, []<class... Values> {
-            return (std::is_nothrow_constructible_v<std::decay_t<Values>, Values> && ...) &&
+            return (std::constructible_from<std::decay_t<Values>, Values> && ...) &&
                 requires(Callable && callable, std::decay_t<Values> & ... values)
             {
-                {
-                    std::invoke(std::forward<Callable>(callable), values...)
-                } noexcept -> sender_in<Env>;
+                {std::invoke(std::forward<Callable>(callable), values...)}->sender_in<Env>;
             };
         }>;
+
+template <class Callable, class Receiver, class... Values>
+inline constexpr bool binding_nothrow =
+    (std::is_nothrow_constructible_v<std::decay_t<Values>, Values> && ...) &&
+    std::is_nothrow_invocable_v<Callable&&, std::decay_t<Values>&...> && requires {
+        {
+            execution::connect(
+                std::declval<std::invoke_result_t<Callable&&, std::decay_t<Values> & ...>>(),
+                std::declval<Receiver>())
+        } noexcept;
+    };
 
 template <execution::sender Sender, movable_value Callable> class sender {
     template <class Receiver> class operation {
@@ -68,16 +78,20 @@ template <execution::sender Sender, movable_value Callable> class sender {
             using child_sender = std::invoke_result_t<Callable&&, Values&...>;
             using child_operation = decltype(execution::connect(std::declval<child_sender>(),
                                                                 std::declval<child_receiver>()));
+            static constexpr bool start_nothrow =
+                std::is_nothrow_invocable_v<Callable&&, Values&...> &&
+                noexcept(execution::connect(std::declval<child_sender>(),
+                                            std::declval<child_receiver>()));
             // Destroy the child before the values it may borrow.
             operation_state_storage<child_operation> child;
 
             explicit branch(auto&&... incoming)
                 : values(std::forward<decltype(incoming)>(incoming)...) {}
 
-            void start(operation& parent) noexcept {
-                auto& child_state = child.emplace_from([&] {
+            void start(operation& parent) noexcept(start_nothrow) {
+                auto& child_state = child.emplace_from([&]() noexcept(start_nothrow) {
                     return std::apply(
-                        [&](auto&... stored) {
+                        [&](auto&... stored) noexcept(start_nothrow) {
                             return execution::connect(
                                 std::invoke(std::move(parent.callable_), stored...),
                                 child_receiver{&parent});
@@ -99,9 +113,23 @@ template <execution::sender Sender, movable_value Callable> class sender {
             }
             void set_value(auto&&... values) && noexcept {
                 using selected = branch<std::tuple<std::decay_t<decltype(values)>...>>;
-                auto& state = parent->branches_.template emplace<selected>(
-                    std::forward<decltype(values)>(values)...);
-                state.start(*parent);
+                constexpr bool nothrow =
+                    binding_nothrow<Callable, child_receiver, decltype(values)...>;
+                auto bind = [&]() noexcept(nothrow) {
+                    auto& state = parent->branches_.template emplace<selected>(
+                        std::forward<decltype(values)>(values)...);
+                    state.start(*parent);
+                };
+                if constexpr (nothrow) {
+                    bind();
+                } else {
+                    try {
+                        bind();
+                    } catch (...) {
+                        execution::set_error(std::move(parent->receiver_),
+                                             std::current_exception());
+                    }
+                }
             }
             void set_error(auto&& error) && noexcept {
                 execution::set_error(std::move(parent->receiver_),
@@ -129,7 +157,11 @@ template <execution::sender Sender, movable_value Callable> class sender {
     public:
         using operation_state_concept = operation_state_tag;
 
-        operation(Sender source, Receiver receiver, Callable callable)
+        operation(Sender source, Receiver receiver,
+                  Callable callable) noexcept(std::is_nothrow_move_constructible_v<Receiver> &&
+                                              std::is_nothrow_move_constructible_v<Callable> &&
+                                              noexcept(execution::connect(std::declval<Sender>(),
+                                                                          upstream_receiver{})))
             : receiver_(std::move(receiver)), callable_(std::move(callable)),
               upstream_(execution::connect(std::move(source), upstream_receiver{this})) {}
 
@@ -152,7 +184,12 @@ public:
         completion_signatures_of_t<Sender, Env>, []<class Tag, class... Values> {
             if constexpr (std::same_as<Tag, set_value_t>) {
                 using child_sender = std::invoke_result_t<Callable&&, std::decay_t<Values>&...>;
-                return std::type_identity<completion_signatures_of_t<child_sender, Env>>{};
+                using errors = std::conditional_t<
+                    binding_nothrow<Callable, connect_probe_receiver<Env>, Values...>,
+                    execution::completion_signatures<>,
+                    execution::completion_signatures<set_error_t(std::exception_ptr)>>;
+                return std::type_identity<completion_signatures_cat_t<
+                    completion_signatures_of_t<child_sender, Env>, errors>>{};
             } else {
                 return std::type_identity<execution::completion_signatures<Tag(Values...)>>{};
             }
@@ -169,12 +206,16 @@ public:
             source_);
     }
 
-    auto connect(receiver_for_sender<sender> auto receiver) && {
+    auto connect(receiver_for_sender<sender> auto receiver) && noexcept(
+        noexcept(operation<decltype(receiver)>{std::declval<Sender>(), std::move(receiver),
+                                               std::declval<Callable>()})) {
         return operation<decltype(receiver)>{std::move(source_), std::move(receiver),
                                              std::move(callable_)};
     }
 
-    auto connect(receiver_for_sender<sender> auto receiver) const&
+    auto connect(receiver_for_sender<sender> auto receiver) const& noexcept(
+        noexcept(operation<decltype(receiver)>{std::declval<const Sender&>(), std::move(receiver),
+                                               std::declval<const Callable&>()}))
         requires std::copy_constructible<Sender> && std::copy_constructible<Callable>
     {
         return operation<decltype(receiver)>{source_, std::move(receiver), callable_};
@@ -191,7 +232,8 @@ private:
  * Create a dependent operation after a value completion. The callable receives
  * references to decayed inputs retained in the operation state, not transient
  * completion arguments. Child state is destroyed before those inputs. This
- * adaptor does not choose an execution context; callables must be nonthrowing.
+ * adaptor does not choose an execution context. Exceptions from retaining inputs,
+ * invoking the callable, or connecting its sender become exception_ptr errors.
  */
 struct let_value_t {
     auto operator()(sender auto&& source, detail::movable_value auto&& callable) const

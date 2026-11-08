@@ -36,7 +36,10 @@ concept completion_tag =
 template <class Receiver>
 concept receiver =
     std::derived_from<typename std::remove_cvref_t<Receiver>::receiver_concept, receiver_tag> &&
-    std::move_constructible<std::remove_cvref_t<Receiver>> && detail::get_env_callable<Receiver>;
+    std::move_constructible<std::remove_cvref_t<Receiver>> &&
+    std::constructible_from<std::remove_cvref_t<Receiver>, Receiver> &&
+    std::is_nothrow_move_constructible_v<std::remove_cvref_t<Receiver>> &&
+    detail::get_env_callable<Receiver>;
 
 template <class Operation>
 concept operation_state =

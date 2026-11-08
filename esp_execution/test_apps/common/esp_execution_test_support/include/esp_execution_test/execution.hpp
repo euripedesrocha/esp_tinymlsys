@@ -5,6 +5,7 @@
 
 #include <concepts>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <semaphore>
 #include <thread>
@@ -88,7 +89,8 @@ template <class ValueCompletion> struct basic_iteration_sender {
         using operation_state_concept = execution::operation_state_tag;
 
         operation(int& starts, int iterations_before_terminal, terminate_as terminal,
-                  Receiver receiver, child_lifetime* lifetime)
+                  Receiver receiver,
+                  child_lifetime* lifetime) noexcept(std::is_nothrow_move_constructible_v<Receiver>)
             : iterations_started_(&starts), iterations_before_terminal_(iterations_before_terminal),
               terminal_(terminal), receiver_(std::move(receiver)), lifetime_(lifetime) {
             if (lifetime_ != nullptr) {
@@ -138,7 +140,9 @@ template <class ValueCompletion> struct basic_iteration_sender {
 
     auto get_env() const noexcept -> execution::empty_env { return {}; }
 
-    auto connect(execution::receiver auto&& receiver) const& {
+    auto connect(execution::receiver auto&& receiver) const& noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_move_constructible_v<std::decay_t<decltype(receiver)>>) {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return operation<receiver_type>{*iterations_started, iterations_before_terminal, terminal,
                                         std::forward<decltype(receiver)>(receiver), lifetime};
@@ -187,7 +191,8 @@ struct multi_value_sender {
     public:
         using operation_state_concept = execution::operation_state_tag;
 
-        operation(Receiver receiver, int* starts)
+        operation(Receiver receiver,
+                  int* starts) noexcept(std::is_nothrow_move_constructible_v<Receiver>)
             : receiver_(std::move(receiver)), starts_(starts) {}
 
         operation(const operation&) = delete;
@@ -223,7 +228,9 @@ struct multi_value_sender {
                                          execution::set_value_t(int, int),
                                          execution::set_error_t(int), execution::set_stopped_t()>;
 
-    auto connect(execution::receiver auto&& receiver) const& {
+    auto connect(execution::receiver auto&& receiver) const& noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_move_constructible_v<std::decay_t<decltype(receiver)>>) {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return operation<receiver_type>{std::forward<decltype(receiver)>(receiver), starts};
     }
@@ -250,6 +257,7 @@ struct result {
     int errors = 0;
     int error = 0;
     int stopped = 0;
+    std::exception_ptr exception;
 };
 
 struct result_receiver {
@@ -269,6 +277,10 @@ struct result_receiver {
         state->error = error;
     }
 
+    void set_error(std::exception_ptr error) && noexcept {
+        state->errors += 1;
+        state->exception = std::move(error);
+    }
     void set_stopped() && noexcept { state->stopped += 1; }
 };
 
@@ -295,6 +307,12 @@ struct destroying_receiver {
     void set_error(int error) && noexcept {
         state->completion.errors += 1;
         state->completion.error = error;
+        destroy_operation();
+    }
+
+    void set_error(std::exception_ptr error) && noexcept {
+        state->completion.errors += 1;
+        state->completion.exception = std::move(error);
         destroy_operation();
     }
 
@@ -362,7 +380,8 @@ struct deferred_sender {
     public:
         using operation_state_concept = esp::execution::operation_state_tag;
 
-        operation(deferred_completion& pending, Receiver receiver)
+        operation(deferred_completion& pending,
+                  Receiver receiver) noexcept(std::is_nothrow_move_constructible_v<Receiver>)
             : pending_(&pending), receiver_(std::move(receiver)) {}
 
         operation(const operation&) = delete;
@@ -395,7 +414,9 @@ struct deferred_sender {
         Receiver receiver_;
     };
 
-    auto connect(esp::execution::receiver auto&& receiver) const& {
+    auto connect(esp::execution::receiver auto&& receiver) const& noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_move_constructible_v<std::decay_t<decltype(receiver)>>) {
         return operation<std::decay_t<decltype(receiver)>>{
             *pending, std::forward<decltype(receiver)>(receiver)};
     }
@@ -478,7 +499,8 @@ struct threaded_sender {
     public:
         using operation_state_concept = esp::execution::operation_state_tag;
 
-        operation(threaded_completion& pending, Receiver receiver)
+        operation(threaded_completion& pending,
+                  Receiver receiver) noexcept(std::is_nothrow_move_constructible_v<Receiver>)
             : pending_(pending), receiver_(std::move(receiver)) {}
 
         operation(const operation&) = delete;
@@ -517,7 +539,9 @@ struct threaded_sender {
         Receiver receiver_;
     };
 
-    auto connect(esp::execution::receiver auto&& receiver) const& {
+    auto connect(esp::execution::receiver auto&& receiver) const& noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_move_constructible_v<std::decay_t<decltype(receiver)>>) {
         return operation<std::decay_t<decltype(receiver)>>{
             pending, std::forward<decltype(receiver)>(receiver)};
     }

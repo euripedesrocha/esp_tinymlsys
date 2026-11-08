@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <concepts>
+#include <exception>
 #include <type_traits>
 #include <utility>
 
@@ -19,6 +20,7 @@ struct result {
     int errors = 0;
     int error = 0;
     int stopped = 0;
+    std::exception_ptr exception;
 };
 
 struct result_receiver {
@@ -36,6 +38,10 @@ struct result_receiver {
     void set_error(int error) && noexcept {
         state->errors += 1;
         state->error = error;
+    }
+    void set_error(std::exception_ptr error) && noexcept {
+        state->errors += 1;
+        state->exception = std::move(error);
     }
     void set_stopped() && noexcept { state->stopped += 1; }
 };
@@ -155,14 +161,14 @@ template <class Tag> void check_receiver_environment(auto adaptor) {
     STATIC_REQUIRE(execution::sender_in<incompatible>);
     STATIC_REQUIRE(execution::sender_in<throwing>);
     STATIC_REQUIRE_FALSE(execution::sender_in<incompatible, continuation_test_env>);
-    STATIC_REQUIRE_FALSE(execution::sender_in<throwing, continuation_test_env>);
+    STATIC_REQUIRE(execution::sender_in<throwing, continuation_test_env>);
     STATIC_REQUIRE_FALSE(execution::sender_in<valid, unavailable_env>);
     STATIC_REQUIRE_FALSE(can_connect<valid, environment_receiver<unavailable_env>>);
     STATIC_REQUIRE_FALSE(can_connect<const valid&, environment_receiver<unavailable_env>>);
     STATIC_REQUIRE_FALSE(can_connect<incompatible, receiver>);
     STATIC_REQUIRE_FALSE(can_connect<const incompatible&, receiver>);
-    STATIC_REQUIRE_FALSE(can_connect<throwing, receiver>);
-    STATIC_REQUIRE_FALSE(can_connect<const throwing&, receiver>);
+    STATIC_REQUIRE(can_connect<throwing, receiver>);
+    STATIC_REQUIRE(can_connect<const throwing&, receiver>);
 
     result completion;
     auto work = adaptor(source{}, environment_handler{});
@@ -220,8 +226,7 @@ TEST_CASE("upon_error handles errors as value completions", "[upon_error]") {
     REQUIRE(completion.values == 1);
     REQUIRE(completion.value == 42);
     REQUIRE(completion.errors == 0);
-    STATIC_REQUIRE_FALSE(
-        can_upon_error<decltype(execution::just_error(1)), throwing_error_handler>);
+    STATIC_REQUIRE(can_upon_error<decltype(execution::just_error(1)), throwing_error_handler>);
 }
 
 TEST_CASE("upon_error deduplicates transformed signatures", "[upon_error][signatures]") {
@@ -267,8 +272,7 @@ TEST_CASE("upon_stopped handles stopped as a value completion", "[upon_stopped]"
     REQUIRE(completion.values == 1);
     REQUIRE(completion.value == 42);
     REQUIRE(completion.stopped == 0);
-    STATIC_REQUIRE_FALSE(
-        can_upon_stopped<decltype(execution::just_stopped()), throwing_stopped_handler>);
+    STATIC_REQUIRE(can_upon_stopped<decltype(execution::just_stopped()), throwing_stopped_handler>);
 }
 
 TEST_CASE("upon_stopped deduplicates transformed signatures", "[upon_stopped][signatures]") {

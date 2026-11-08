@@ -135,6 +135,7 @@ template <class Env> struct environment_receiver {
     int* value;
     Env get_env() const noexcept { return {}; }
     void set_value(int first, int second) && noexcept { *value = first + second; }
+    void set_error(std::exception_ptr) && noexcept { std::abort(); }
 };
 
 void check_environment_only_composition(execution::sender auto work) {
@@ -382,14 +383,14 @@ TEST_CASE("let_value rejects invalid callables without hard substitution errors"
     STATIC_REQUIRE(can_let_value<source, decltype(valid)>);
     STATIC_REQUIRE_FALSE(can_let_value<int, decltype(valid)>);
     STATIC_REQUIRE_FALSE(can_let_value<source, noninvocable_callable>);
-    STATIC_REQUIRE_FALSE(can_let_value<source, decltype(throwing)>);
+    STATIC_REQUIRE(can_let_value<source, decltype(throwing)>);
     STATIC_REQUIRE_FALSE(can_let_value<source, decltype(not_a_sender)>);
     STATIC_REQUIRE_FALSE(can_let_value<source, decltype(rvalue_argument)>);
     STATIC_REQUIRE_FALSE(can_let_value<source, decltype(invalid_signatures)>);
     STATIC_REQUIRE_FALSE(can_let_value<source, copy_only_callable>);
     STATIC_REQUIRE_FALSE(can_let_value<multi_value_sender, decltype(valid)>);
-    STATIC_REQUIRE_FALSE(can_let_value<signature_sender<execution::set_value_t(throwing_copy&)>,
-                                       decltype(accepts_any)>);
+    STATIC_REQUIRE(can_let_value<signature_sender<execution::set_value_t(throwing_copy&)>,
+                                 decltype(accepts_any)>);
 }
 
 TEST_CASE("let_value checks receiver compatibility at connection", "[let_value][constraints]") {
@@ -433,11 +434,14 @@ TEST_CASE("let_value validates every branch against the receiver environment",
     using sender = decltype(work);
     STATIC_REQUIRE(std::same_as<decltype(execution::get_env(work)), const alternate_env&>);
     REQUIRE(std::addressof(execution::get_env(work)) == std::addressof(environment));
-    STATIC_REQUIRE(std::same_as<execution::completion_signatures_of_t<sender>,
-                                execution::completion_signatures<execution::set_value_t(int)>>);
+    STATIC_REQUIRE(
+        std::same_as<execution::completion_signatures_of_t<sender>,
+                     execution::completion_signatures<execution::set_value_t(int),
+                                                      execution::set_error_t(std::exception_ptr)>>);
     STATIC_REQUIRE(
         std::same_as<execution::completion_signatures_of_t<sender, alternate_env>,
-                     execution::completion_signatures<execution::set_value_t(int, int)>>);
+                     execution::completion_signatures<execution::set_value_t(int, int),
+                                                      execution::set_error_t(std::exception_ptr)>>);
     STATIC_REQUIRE_FALSE(execution::sender_in<sender, unsupported_source_env>);
     STATIC_REQUIRE_FALSE(execution::sender_in<sender, unsupported_child_env>);
     STATIC_REQUIRE_FALSE(can_connect<sender, environment_receiver<unsupported_source_env>>);

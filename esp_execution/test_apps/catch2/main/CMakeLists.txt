@@ -17,6 +17,7 @@ idf_component_register(
     SRCS
         "test_main.cpp"
         "test_execution.cpp"
+        "test_exception_handling.cpp"
         "test_value_types.cpp"
         "test_control_flow.cpp"
         "test_repeat.cpp"

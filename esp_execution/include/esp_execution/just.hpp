@@ -22,7 +22,9 @@ class just_sender {
     public:
         using operation_state_concept = operation_state_tag;
 
-        constexpr operation(auto&& receiver, auto&& values)
+        constexpr operation(auto&& receiver, auto&& values) noexcept(
+            std::is_nothrow_constructible_v<Receiver, decltype(receiver)> &&
+            std::is_nothrow_constructible_v<std::tuple<Values...>, decltype(values)>)
             : receiver_(std::forward<decltype(receiver)>(receiver)),
               values_(std::forward<decltype(values)>(values)) {}
 
@@ -56,13 +58,17 @@ public:
         requires std::constructible_from<std::tuple<Values...>, decltype(values)...>
         : values_(std::forward<decltype(values)>(values)...) {}
 
-    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) && {
+    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) && noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_move_constructible_v<std::tuple<Values...>>) {
         using receiver_type = std::decay_t<decltype(receiver)>;
         return operation<receiver_type>{std::forward<decltype(receiver)>(receiver),
                                         std::move(values_)};
     }
 
-    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) const&
+    constexpr auto connect(receiver_for_sender<just_sender> auto&& receiver) const& noexcept(
+        std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>, decltype(receiver)> &&
+        std::is_nothrow_copy_constructible_v<std::tuple<Values...>>)
         requires(std::copy_constructible<Values> && ...)
     {
         using receiver_type = std::decay_t<decltype(receiver)>;

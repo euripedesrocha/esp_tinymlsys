@@ -111,6 +111,10 @@ struct move_only_probe_receiver : probe_receiver {
     move_only_probe_receiver(move_only_probe_receiver&&) = default;
 };
 
+struct throwing_move_receiver : probe_receiver {
+    throwing_move_receiver(throwing_move_receiver&&) noexcept(false);
+};
+
 struct invalid_completion_receiver {
     using receiver_concept = receiver_tag;
 
@@ -375,6 +379,10 @@ TEST_CASE("public vocabulary concepts distinguish each role", "[concepts]") {
     STATIC_REQUIRE(receiver<probe_receiver>);
     STATIC_REQUIRE(receiver<memberless_receiver>);
     STATIC_REQUIRE_FALSE(receiver<immovable_receiver>);
+    STATIC_REQUIRE_FALSE(receiver<throwing_move_receiver>);
+    STATIC_REQUIRE(receiver<move_only_probe_receiver>);
+    STATIC_REQUIRE_FALSE(receiver<move_only_probe_receiver&>);
+    STATIC_REQUIRE_FALSE(receiver<const move_only_probe_receiver&>);
     STATIC_REQUIRE_FALSE(receiver<throwing_env_receiver>);
 
     STATIC_REQUIRE(operation_state<one_operation>);
@@ -717,7 +725,7 @@ TEST_CASE("then transforms every advertised value signature", "[then][signatures
     STATIC_REQUIRE_FALSE(can_then<int, increment_callable>);
     STATIC_REQUIRE_FALSE(can_then<one_sender, noninvocable_callable>);
     STATIC_REQUIRE_FALSE(can_then<multi_signature_sender, increment_callable>);
-    STATIC_REQUIRE_FALSE(can_then<one_sender, throwing_callable>);
+    STATIC_REQUIRE(can_then<one_sender, throwing_callable>);
 }
 
 TEST_CASE("factory and adaptor constraints preserve ownership", "[concepts][adaptor]") {

@@ -11,6 +11,15 @@ namespace esp::execution {
 
 namespace detail {
 
+template <class Env> struct connect_probe_receiver {
+    using receiver_concept = receiver_tag;
+
+    Env get_env() const noexcept { std::unreachable(); }
+    void set_value(auto&&...) && noexcept;
+    void set_error(auto&&) && noexcept;
+    void set_stopped() && noexcept;
+};
+
 template <class Sender, class Receiver>
 concept member_connectable =
     sender<Sender> && receiver<Receiver> && requires(Sender&& sender, Receiver&& receiver) {

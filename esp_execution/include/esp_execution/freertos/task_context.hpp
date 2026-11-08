@@ -95,7 +95,12 @@ public:
             public:
                 using operation_state_concept = operation_state_tag;
 
-                operation(task_context& context, submission_policy policy, Receiver receiver)
+                operation(
+                    task_context& context, submission_policy policy,
+                    Receiver
+                        receiver) noexcept(std::
+                                               is_nothrow_copy_constructible_v<submission_policy> &&
+                                           std::is_nothrow_move_constructible_v<Receiver>)
                     : context_{&context}, policy_{policy}, receiver_{std::move(receiver)} {}
 
                 operation(const operation&) =
@@ -161,7 +166,11 @@ public:
             }
 
             [[nodiscard]] auto
-            connect(execution::detail::receiver_for_sender<schedule_sender> auto&& receiver) const {
+            connect(execution::detail::receiver_for_sender<schedule_sender> auto&& receiver) const
+                noexcept(std::is_nothrow_copy_constructible_v<submission_policy> &&
+                         std::is_nothrow_constructible_v<std::decay_t<decltype(receiver)>,
+                                                         decltype(receiver)> &&
+                         std::is_nothrow_move_constructible_v<std::decay_t<decltype(receiver)>>) {
                 using receiver_type = std::decay_t<decltype(receiver)>;
                 return operation<receiver_type>{*context_, policy_,
                                                 std::forward<decltype(receiver)>(receiver)};

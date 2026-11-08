@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <new>
@@ -60,22 +61,24 @@ private:
     Sender* source_;
 };
 
-template <class Environment> struct connect_probe_receiver {
-    using receiver_concept = receiver_tag;
-
-    constexpr Environment get_env() const noexcept { std::unreachable(); }
-
-    constexpr void set_value(auto&&...) && noexcept {}
-
-    constexpr void set_error(auto&&) && noexcept {}
-
-    constexpr void set_stopped() && noexcept {}
-};
-
 template <class Sender, class Environment = empty_env>
 concept lvalue_connectable = requires(std::remove_cvref_t<Sender>& sender) {
     execution::connect(sender_reference{sender}, connect_probe_receiver<Environment>{});
 };
+
+template <class Sender, class Environment>
+inline constexpr bool nothrow_lvalue_connect = requires(Sender& source) {
+    {
+        execution::connect(sender_reference{source}, connect_probe_receiver<Environment>{})
+    } noexcept;
+};
+
+template <class Sender, class Environment>
+using iteration_signatures = completion_signatures_cat_t<
+    completion_signatures_of_t<Sender, Environment>,
+    std::conditional_t<nothrow_lvalue_connect<Sender, Environment>,
+                       execution::completion_signatures<>,
+                       execution::completion_signatures<set_error_t(std::exception_ptr)>>>;
 
 template <class Error>
 concept storable_error =
@@ -263,8 +266,7 @@ public:
     using completion_signatures = completion_signatures_cat_t<
         std::conditional_t<Control::can_complete, execution::completion_signatures<set_value_t()>,
                            execution::completion_signatures<>>,
-        remove_completion_signatures_for_t<completion_signatures_of_t<Sender, Environment>,
-                                           set_value_t>>;
+        remove_completion_signatures_for_t<iteration_signatures<Sender, Environment>, set_value_t>>;
 
     constexpr sender(Sender source,
                      Control control) noexcept(std::is_nothrow_move_constructible_v<Sender> &&
@@ -284,7 +286,7 @@ private:
         Receiver receiver_;
         Control control_;
 
-        using child_signatures = completion_signatures_of_t<Sender, env_of_t<Receiver>>;
+        using child_signatures = iteration_signatures<Sender, env_of_t<Receiver>>;
         using error_storage = pending_error<Receiver, child_signatures>;
 
         class repeat_receiver {
@@ -373,9 +375,26 @@ private:
                 if ((pending_requests & iteration_pending) != 0) {
                     requested_.fetch_and(static_cast<request_type>(~iteration_pending),
                                          std::memory_order_acq_rel);
-                    execution::start(child_.emplace_from([this] {
-                        return execution::connect(sender_reference{source_}, repeat_receiver{this});
-                    }));
+                    auto connect_child = [this]() -> child_operation& {
+                        return child_.emplace_from([this] {
+                            return execution::connect(sender_reference{source_},
+                                                      repeat_receiver{this});
+                        });
+                    };
+                    if constexpr (noexcept(
+                                      execution::connect(std::declval<sender_reference<Sender>>(),
+                                                         repeat_receiver{this}))) {
+                        execution::start(connect_child());
+                    } else {
+                        child_operation* child;
+                        try {
+                            child = &connect_child();
+                        } catch (...) {
+                            complete_error(std::current_exception());
+                            continue;
+                        }
+                        execution::start(*child);
+                    }
                     continue;
                 }
 
@@ -430,12 +449,18 @@ private:
     };
 
 public:
-    constexpr auto connect(receiver_for_sender<sender> auto receiver) && {
+    constexpr auto connect(receiver_for_sender<sender> auto receiver) && noexcept(
+        std::is_nothrow_move_constructible_v<Sender> &&
+        std::is_nothrow_move_constructible_v<Control> &&
+        std::is_nothrow_move_constructible_v<decltype(receiver)>) {
         return operation<decltype(receiver)>{std::move(source_), std::move(receiver),
                                              std::move(control_)};
     }
 
-    constexpr auto connect(receiver_for_sender<sender> auto receiver) const&
+    constexpr auto connect(receiver_for_sender<sender> auto receiver) const& noexcept(
+        std::is_nothrow_copy_constructible_v<Sender> &&
+        std::is_nothrow_copy_constructible_v<Control> &&
+        std::is_nothrow_move_constructible_v<decltype(receiver)>)
         requires std::copy_constructible<Sender> && std::copy_constructible<Control>
     {
         return operation<decltype(receiver)>{source_, std::move(receiver), control_};
