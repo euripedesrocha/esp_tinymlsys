@@ -10,6 +10,14 @@ set(portable_sources
     "test_scheduler.cpp"
     "test_continues_on.cpp"
     "test_nonthrowing.cpp"
+    "test_io_concepts.cpp"
+    "test_io_primitives.cpp"
+    "test_io_environment.cpp"
+    "test_io_operation_environment.cpp"
+    "test_io_nonthrowing.cpp"
+    "test_io_operations.cpp"
+    "test_io_composition.cpp"
+    "test_io_transport.cpp"
 )
 set(freertos_sources
     "test_freertos_wait.cpp"
@@ -50,4 +58,7 @@ idf_component_register(
         ${peripheral_dependencies}
 )
 
-set_source_files_properties("test_nonthrowing.cpp" PROPERTIES COMPILE_OPTIONS "-fno-exceptions")
+set_source_files_properties(
+    "test_nonthrowing.cpp" "test_io_nonthrowing.cpp"
+    PROPERTIES COMPILE_OPTIONS "-fno-exceptions"
+)
