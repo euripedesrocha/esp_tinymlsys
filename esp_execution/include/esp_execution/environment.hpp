@@ -13,6 +13,9 @@ struct empty_env {};
 
 namespace detail {
 
+template <class Env, class Tag>
+concept queryable_with = requires(const Env& env, Tag& tag) { env.query(tag); };
+
 // get_env falls back only when no member exists. A present customization must
 // be noexcept and return a destructible environment.
 template <class Object>

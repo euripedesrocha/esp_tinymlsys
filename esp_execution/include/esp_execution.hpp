@@ -24,6 +24,7 @@
 #include "esp_execution/upon_stopped.hpp"
 #include "esp_execution/let_value.hpp"
 #include "esp_execution/continues_on.hpp"
+#include "esp_execution/starts_on.hpp"
 #include "esp_execution/repeat.hpp"
 
 // IWYU pragma: end_exports

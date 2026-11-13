@@ -2,6 +2,7 @@
 #include "esp_execution/just.hpp"
 #include "esp_execution/let_value.hpp"
 #include "esp_execution/repeat.hpp"
+#include "esp_execution/starts_on.hpp"
 #include "esp_execution/then.hpp"
 #include "esp_execution/upon_error.hpp"
 #include "esp_execution/upon_stopped.hpp"
@@ -10,6 +11,21 @@
 
 namespace {
 namespace ex = esp::execution;
+
+struct immediate_scheduler {
+    using scheduler_concept = ex::scheduler_tag;
+    struct environment {
+        auto query(ex::get_completion_scheduler_t<ex::set_value_t>) const noexcept {
+            return immediate_scheduler{};
+        }
+    };
+    using just_sender = decltype(ex::just());
+    struct source : just_sender {
+        auto get_env() const noexcept { return environment{}; }
+    };
+    auto schedule() const noexcept { return source{ex::just()}; }
+    bool operator==(const immediate_scheduler&) const = default;
+};
 } // namespace
 
 TEST_CASE("nonthrowing continuations execute with exception support disabled", "[no_exceptions]") {
@@ -96,4 +112,65 @@ TEST_CASE("nonthrowing dependent operations preserve reference environments",
     auto operation = ex::connect(std::move(work), receiver{&env, &completions});
     ex::start(operation);
     CHECK(completions == 1);
+}
+
+SCENARIO("starts_on executes a nonthrowing child with exceptions disabled",
+         "[starts_on][no_exceptions]") {
+    struct receiver {
+        using receiver_concept = ex::receiver_tag;
+        int* value;
+        void set_value(int incoming) && noexcept { *value = incoming; }
+        void set_error(std::exception_ptr) && noexcept { FAIL_CHECK("Unexpected exception"); }
+    };
+    int value = 0;
+
+    GIVEN("a nonthrowing scheduler and a child producing an integer") {
+        WHEN("the sender is connected and started") {
+            auto sender = ex::starts_on(immediate_scheduler{}, ex::just(42));
+            STATIC_REQUIRE(
+                std::same_as<ex::completion_signatures_of_t<decltype(sender)>,
+                             ex::completion_signatures<ex::set_value_t(int),
+                                                       ex::set_error_t(std::exception_ptr)>>);
+            STATIC_REQUIRE(noexcept(ex::connect(std::move(sender), receiver{})));
+            auto operation = ex::connect(std::move(sender), receiver{&value});
+            ex::start(operation);
+
+            THEN("the nonthrowing execution path delivers the value") { CHECK(value == 42); }
+        }
+    }
+}
+
+SCENARIO("starts_on preserves reference environments with exceptions disabled",
+         "[starts_on][no_exceptions][environment]") {
+    struct environment {
+        environment() = default;
+        environment(const environment&) = delete;
+    };
+    struct receiver {
+        using receiver_concept = ex::receiver_tag;
+        const environment* env;
+        int* completions;
+        const environment& get_env() const noexcept { return *env; }
+        void set_value() && noexcept { ++*completions; }
+        void set_error(std::exception_ptr) && noexcept { FAIL_CHECK("Unexpected exception"); }
+    };
+    environment env;
+    int completions = 0;
+
+    GIVEN("a receiver exposing a noncopyable environment by reference") {
+        WHEN("a nonthrowing scheduled sender is connected and started") {
+            auto sender = ex::starts_on(immediate_scheduler{}, ex::just());
+            STATIC_REQUIRE(
+                std::same_as<ex::completion_signatures_of_t<decltype(sender), const environment&>,
+                             ex::completion_signatures<ex::set_value_t(),
+                                                       ex::set_error_t(std::exception_ptr)>>);
+            STATIC_REQUIRE(noexcept(ex::connect(std::move(sender), receiver{})));
+            auto operation = ex::connect(std::move(sender), receiver{&env, &completions});
+            ex::start(operation);
+
+            THEN("the operation completes without copying the environment") {
+                CHECK(completions == 1);
+            }
+        }
+    }
 }

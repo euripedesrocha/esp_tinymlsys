@@ -63,4 +63,7 @@ template <class... Arguments> struct meta_arguments {
 template <template <class...> class Template, class... Arguments>
 using meta_apply_t = typename meta_arguments<Arguments...>::template apply<Template>;
 
+template <template <class...> class Template, class... Arguments>
+concept valid_template_application = requires { typename meta_apply_t<Template, Arguments...>; };
+
 } // namespace esp::execution::detail

@@ -41,7 +41,7 @@ struct gather_signature<SelectedTag, Tag(Arguments...), Tuple> {
 };
 
 template <class Tag, class... Arguments, template <class...> class Tuple>
-    requires requires { typename meta_apply_t<Tuple, Arguments...>; }
+    requires valid_template_application<Tuple, Arguments...>
 struct gather_signature<Tag, Tag(Arguments...), Tuple> {
     using type = type_list<meta_apply_t<Tuple, Arguments...>>;
 };

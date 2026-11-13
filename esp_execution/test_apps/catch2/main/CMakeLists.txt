@@ -9,6 +9,7 @@ set(portable_sources
     "test_let_value.cpp"
     "test_scheduler.cpp"
     "test_continues_on.cpp"
+    "test_starts_on.cpp"
     "test_nonthrowing.cpp"
     "test_io_concepts.cpp"
     "test_io_primitives.cpp"
