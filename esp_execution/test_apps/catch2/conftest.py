@@ -13,13 +13,14 @@ collect_ignore = ["managed_components"]
 
 
 def pytest_addoption(parser):
-    group = parser.getgroup("execution")
+    if getattr(parser, "_esp_idf_options_registered", False):
+        return
+    group = parser.getgroup("esp-idf apps")
     group.addoption(
-        "--run-on",
-        choices=("emulator", "host", "target"),
-        default="emulator",
-        help="Build and run the execution tests on emulator (default), host, or target",
+        "--run-on", choices=("emulator", "host", "target"), default="emulator",
+        help="Execution mode: emulator, native host, or attached target",
     )
+    parser._esp_idf_options_registered = True
 
 
 @pytest.fixture(scope="session")
@@ -48,7 +49,7 @@ def app_path(pytestconfig):
 @pytest.fixture(scope="session")
 def build_dir(pytestconfig, app_path, target):
     app = Path(app_path)
-    build = (app / (pytestconfig.getoption("build_dir") or f"build_{target}")).resolve()
+    build = (app / (pytestconfig.getoption("build_dir") or f"build_{target}_core")).resolve()
     build.mkdir(parents=True, exist_ok=True)
     defaults = [app / "sdkconfig.defaults"]
     profile = app / f"sdkconfig.ci.{target}"

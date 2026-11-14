@@ -1,3 +1,36 @@
+# Start clangd with --query-driver allowing the compilers in these databases.
+# The editor selects the clangd executable; this file cannot select it.
+# Current clangd releases still cannot fully parse GCC 16 reflection/contracts.
 CompileFlags:
   CompilationDatabase: esp_tensor/test/build
-  Remove: [-m*, -f*]
+  # Keep parsing after unsupported C++26 syntax so later overload resolution
+  # does not use an incomplete AST. Preserve the original diagnostics.
+  Add: [-ferror-limit=0]
+  # Keep language and ABI flags; discard only GCC options clang cannot parse.
+  Remove:
+    - -fcontracts
+    - -fcontract-*
+    - -freflection
+    - -fstrict-volatile-bitfields
+    - -fno-shrink-wrap
+    - -fno-tree-switch-conversion
+---
+If:
+  PathMatch: esp_platform_cpp/.*
+CompileFlags:
+  CompilationDatabase: esp_platform_cpp/test_apps/catch2/build_esp32s3_core
+---
+If:
+  PathMatch: esp_execution/.*
+CompileFlags:
+  CompilationDatabase: esp_execution/test_apps/catch2/build_esp32s3_core
+---
+If:
+  PathMatch: esp_freertos_cpp/.*
+CompileFlags:
+  CompilationDatabase: esp_execution/test_apps/catch2/build_linux_core
+---
+If:
+  PathMatch: esp_memory/.*
+CompileFlags:
+  CompilationDatabase: esp_memory/test_apps/catch2/build

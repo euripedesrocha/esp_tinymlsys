@@ -38,7 +38,7 @@ TEST_CASE("GPTimer wait can destroy its state while ISR completion returns on th
         CAPTURE(iteration);
         const auto result = esp_execution_test::wait_support::complete_on_other_core(
             stopped, [](const auto& complete) {
-                execution::idf::gptimer timer;
+                esp::platform::gptimer timer;
                 binary_semaphore callback_done;
                 const auto handler = [&](const gptimer_alarm_event_data_t&) noexcept -> bool {
                     complete();
@@ -108,7 +108,7 @@ TEST_CASE("FreeRTOS wait yields from the ISR to the higher-priority waiting task
         [](void* argument) {
             auto& result = *static_cast<probe*>(argument);
             {
-                execution::idf::gptimer timer;
+                esp::platform::gptimer timer;
                 for (unsigned attempt = 0; attempt < 64 && result.observations < 8; ++attempt) {
                     pending_completion pending;
                     binary_semaphore waiter_done;

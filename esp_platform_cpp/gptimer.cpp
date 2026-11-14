@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Euripedes Rocha
 // SPDX-License-Identifier: Apache-2.0
 
-#include "esp_execution/idf/gptimer.hpp"
+#include "esp_platform_cpp/gptimer.hpp"
 
 #include <limits>
 #include <mutex>
@@ -10,7 +10,7 @@
 #include <freertos/task.h>
 #include <hal/timer_ll.h>
 
-namespace esp::execution::idf {
+namespace esp::platform {
 namespace {
 
 auto driver_result(esp_err_t result) noexcept -> std::expected<void, esp_err_t> {
@@ -184,4 +184,4 @@ bool gptimer::on_alarm(gptimer_handle_t, const gptimer_alarm_event_data_t* event
     return false;
 }
 
-} // namespace esp::execution::idf
+} // namespace esp::platform

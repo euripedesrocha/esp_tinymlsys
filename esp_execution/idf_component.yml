@@ -2,6 +2,10 @@ dependencies:
   idf:
     version: ">=6.0"
   esp_freertos_cpp: "^0.1.0"
+  esp_platform_cpp:
+    version: "^0.1.0"
+    rules:
+      - if: "target != linux"
 description: C++26 execution vocabulary and FreeRTOS execution resources for ESP-IDF
 examples:
   - path: examples/basic

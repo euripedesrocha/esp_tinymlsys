@@ -1,12 +1,12 @@
 # Basic esp-execution example
 
-This minimal-build ESP-IDF application runs `just(40) | then(...)`, connects it
-to a small explicit receiver, and starts the resulting operation state. The
-receiver is intentionally visible so that all three completion channels remain
-part of the example.
+This minimal ESP-IDF application runs `just(40) | then(...)` with an explicit receiver. On completion it logs `just(40) | then(...) completed with 42`. See [basic.cpp](main/basic.cpp).
 
-Build it with:
+From the `esp_execution` directory, select your chip, then build and run:
 
 ```sh
-idf.py -C examples/basic build
+idf.py -C examples/basic set-target <target>
+idf.py -C examples/basic build flash monitor
 ```
+
+The example manifest uses the repository's local component directories.

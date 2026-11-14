@@ -37,7 +37,7 @@ def test_catch2_console(request, run_on, build_dir, target, tmp_path):
             "--inject",
             "test\\n",
             "--exit-on",
-            "test case",
+            "test cases)",
         ]
         log_path = tmp_path / "esp-emu.log"
         try:

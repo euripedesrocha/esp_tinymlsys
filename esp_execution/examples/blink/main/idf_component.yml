@@ -9,3 +9,8 @@ dependencies:
   esp_freertos_cpp:
     version: "*"
     override_path: ../../../../esp_freertos_cpp
+  esp_platform_cpp:
+    version: "*"
+    override_path: ../../../../esp_platform_cpp
+    rules:
+      - if: "target != linux"

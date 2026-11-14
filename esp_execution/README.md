@@ -1,18 +1,5 @@
 # esp-execution
 
-<!--toc:start-->
-
-- [esp-execution](#esp-execution)
-  - [Requirements](#requirements)
-  - [Header organization](#header-organization)
-  - [Lifecycle](#lifecycle)
-  - [Example](#example)
-  - [Deliberate deviations from N5054](#deliberate-deviations-from-n5054)
-  - [Validation](#validation)
-  - [References](#references)
-
-<!--toc:end-->
-
 `esp-execution` is a small, portable C++26 teaching component for learning the sender → receiver → operation-state
 lifecycle on both the ESP-IDF Linux target and embedded targets. It is not a conforming implementation of the C++
 Execution control library.
@@ -22,15 +9,19 @@ The vocabulary follows the N5054 working draft, including the current `sender_ta
 `esp_execution.hpp`, and is defined in namespace `esp::execution`.
 
 > [!WARNING]
-> This component is pedagogical and intentionally incomplete. Do not treat it as a substitute for `std::execution` or
+> This implementation is incomplete. Do not treat it as a substitute for `std::execution` or
 > a production execution library.
 
 ## Requirements
 
 - ESP-IDF 6.0 or newer
-- A C++26-capable compiler (bundled with ESP-IDF)
+- A C++26 compiler supporting `-fcontracts` and `-freflection`; the component enables these flags.
 
-The component is header-only and has no ESP-IDF runtime dependency.
+The sender/receiver vocabulary and generic adaptors are defined in headers. The ESP-IDF component also builds a
+FreeRTOS task scheduling resource and depends on [`esp_freertos_cpp`](../esp_freertos_cpp/README.md) and FreeRTOS.
+On non-Linux targets it also depends on [`esp_platform_cpp`](../esp_platform_cpp/README.md) and ESP-IDF system
+facilities. The GPTimer scheduling resource is built when the target supports GPTimer and
+`CONFIG_GPTIMER_ISR_CACHE_SAFE` is disabled.
 
 ## Header Organization
 
@@ -40,21 +31,10 @@ Applications can continue to include only the umbrella header:
 #include "esp_execution.hpp"
 ```
 
-The implementation is split into topic headers in the same order in which the execution model is introduced:
-
-- `concepts.hpp` collects the receiver, operation-state, sender, and `sender_in` concepts together with their tags and
-  internal member-dispatch constraints.
-- `environment.hpp` defines `empty_env`, `get_env`, and `env_of_t` using the named member-query constraint.
-- `completion.hpp` defines completion signatures and the three constrained completion operations.
-- `operation_state.hpp` defines `start`.
-- `connect.hpp` defines `connect` and its internal compatibility machinery.
-- `sender_adaptor.hpp` defines the reusable `sender_adaptor_closure` base, `std::bind_back`-based adaptor storage, and
-  sender pipe syntax.
-- `just.hpp` defines the immediate value, error, and stopped factories.
-- `then.hpp` defines value transformation and partial application.
-
-Each topic header includes its own prerequisites and can be included directly. The umbrella header lists them explicitly
-in this teaching order, so it also serves as a compact map of the component.
+Generic vocabulary and adaptors are available through the umbrella header or their individual headers under
+[`include/esp_execution`](include/esp_execution). Platform scheduling resources use separate headers:
+[`freertos/task_context.hpp`](include/esp_execution/freertos/task_context.hpp) and
+[`idf/gptimer_context.hpp`](include/esp_execution/idf/gptimer_context.hpp).
 
 ## Lifecycle
 
@@ -112,15 +92,27 @@ flowchart LR
 ```
 
 The `just`, `just_error`, and `just_stopped` factories complete synchronously on the thread or FreeRTOS task that calls
-`start`. `then` invokes its callable inline on whichever execution context delivers the upstream value completion. With
-the senders supplied by this component, that is the context that called `start`; future asynchronous senders may
-complete elsewhere.
+`start`. `then` invokes its callable inline on whichever execution context delivers the upstream value completion.
+Scheduling senders can complete asynchronously on a worker task or in an ISR.
 
 Operation states supplied by this component are immovable and noncopyable. Completion functions and `start` are required
 to be `noexcept`.
 
-The complete minimal-build ESP-IDF example is under [examples/basic](examples/basic). Its explicit receiver keeps all
-three completion channels visible.
+A `freertos::task_context` owns a worker and bounded queue. Its scheduler and started operations borrow the context;
+keep both the context and each operation alive through completion. Accepted work completes on the worker; queue
+rejection completes on the submitting context, which can be an ISR. Stop producers and wait for submissions to return
+before `finish()` or destruction. Consult the [task context header](include/esp_execution/freertos/task_context.hpp)
+for admission policies and lifecycle restrictions.
+
+An `idf::gptimer_context` owns a continuously running timer and accepts one outstanding deadline. Successful completion
+runs in the timer ISR; errors run where detected. Receivers must be safe in those contexts. Use `continues_on` to hand
+work to a task, and keep the context and operation alive until completion. Stop producers and complete the pending
+operation before destroying the context. See the [timer context header](include/esp_execution/idf/gptimer_context.hpp).
+
+The [basic example](examples/basic) demonstrates an explicit receiver. The
+[GPTimer blink](examples/gptimer_blink) and [ping-pong](examples/gptimer_ping_pong) examples demonstrate timer-to-task
+handoffs.
+
 ## References
 
 - [N5054 working draft snapshot](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2026/n5054.pdf)

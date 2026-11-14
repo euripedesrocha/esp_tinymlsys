@@ -3,11 +3,10 @@ set(execution_dependencies freertos esp_freertos_cpp)
 set(execution_private_dependencies)
 idf_build_get_property(execution_target IDF_TARGET)
 if(NOT execution_target STREQUAL "linux")
-    list(APPEND execution_dependencies esp_driver_gptimer esp_system)
-    list(APPEND execution_private_dependencies esp_hal_timg)
+    list(APPEND execution_dependencies esp_platform_cpp esp_system)
 endif()
 if(CONFIG_SOC_GPTIMER_SUPPORTED AND NOT CONFIG_GPTIMER_ISR_CACHE_SAFE)
-    list(APPEND execution_sources "gptimer.cpp" "gptimer_context.cpp")
+    list(APPEND execution_sources "gptimer_context.cpp")
 endif()
 idf_component_register(
     SRCS

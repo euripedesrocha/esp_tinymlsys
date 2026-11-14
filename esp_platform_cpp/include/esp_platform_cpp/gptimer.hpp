@@ -7,7 +7,7 @@
 
 #if CONFIG_GPTIMER_ISR_CACHE_SAFE
 #error                                                                                             \
-    "idf::gptimer does not yet support CONFIG_GPTIMER_ISR_CACHE_SAFE; disable it to use this adapter"
+    "platform::gptimer does not yet support CONFIG_GPTIMER_ISR_CACHE_SAFE; disable it to use this adapter"
 #endif
 
 #include <chrono>
@@ -24,7 +24,7 @@
 
 #include "esp_freertos_cpp/critical_section.hpp"
 
-namespace esp::execution::idf {
+namespace esp::platform {
 
 template <class Handler>
 concept gptimer_alarm_handler =
@@ -98,4 +98,4 @@ private:
     bool joining_ = false;
 };
 
-} // namespace esp::execution::idf
+} // namespace esp::platform

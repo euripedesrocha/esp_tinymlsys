@@ -19,9 +19,9 @@
 namespace {
 namespace execution = esp::execution;
 using esp::freertos::binary_semaphore;
+using esp::platform::gptimer;
 using esp_freertos_cpp_test::notify_completion;
 using esp_freertos_cpp_test::wait_for_completion;
-using execution::idf::gptimer;
 using execution::idf::gptimer_context;
 using execution::idf::gptimer_schedule_error;
 using execution::idf::schedule_after;

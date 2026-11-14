@@ -13,7 +13,7 @@
 #include "esp_execution/completion.hpp"
 #include "esp_execution/concepts.hpp"
 #include "esp_freertos_cpp/critical_section.hpp"
-#include "esp_execution/idf/gptimer.hpp"
+#include "esp_platform_cpp/gptimer.hpp"
 #include "esp_execution/scheduler.hpp"
 
 namespace esp::execution::idf {
@@ -131,7 +131,7 @@ private:
     } handler_{this};
     auto submit(alarm_job& job, std::chrono::nanoseconds delay) noexcept
         -> std::expected<void, error>;
-    gptimer timer_;
+    esp::platform::gptimer timer_;
     esp::freertos::spinlock mutex_;
     alarm_job* pending_ = nullptr;
     std::uint64_t registered_at_ = 0;

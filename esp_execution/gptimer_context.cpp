@@ -34,7 +34,7 @@ auto gptimer_context::submit(alarm_job& job, std::chrono::nanoseconds delay) noe
     const auto rate = timer_.resolution_hz();
     const auto seconds = ns / ns_per_second;
     const auto fraction = ((ns % ns_per_second) * rate + ns_per_second - 1) / ns_per_second;
-    const auto maximum = gptimer::max_count();
+    const auto maximum = esp::platform::gptimer::max_count();
     if (seconds > maximum / rate || fraction > maximum - seconds * rate)
         return std::unexpected(gptimer_schedule_error::deadline_out_of_range);
     const auto rounded_ticks = seconds * rate + fraction;
